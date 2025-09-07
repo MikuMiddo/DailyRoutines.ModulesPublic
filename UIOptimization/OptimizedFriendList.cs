@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using DailyRoutines.Abstracts;
@@ -14,6 +14,7 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Info;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Addon;
+using KamiToolKit.Classes;
 using KamiToolKit.Nodes;
 
 namespace DailyRoutines.ModulesPublic;
@@ -36,7 +37,15 @@ public unsafe class OptimizedFriendList : DailyModuleBase
     private static          ModifyInfoMenuItem          ModifyInfoItem    = null!;
     private static readonly TeleportFriendZoneMenuItem  TeleportZoneItem  = new();
     private static readonly TeleportFriendWorldMenuItem TeleportWorldItem = new();
-    
+
+    private static TextInputNode? SearchInputNode;
+    private static CheckboxNode? nameCheckboxNode;
+    private static CheckboxNode? nicknameCheckboxNode;
+    private static CheckboxNode? remakerCheckboxNode;
+    private static HorizontalListNode? SearchLayoutNode;
+
+    private static string searchString = string.Empty;
+
     private static Config ModuleConfig = null!;
 
     private static DRFriendlistRemarkEdit? Addon;
@@ -64,13 +73,51 @@ public unsafe class OptimizedFriendList : DailyModuleBase
         
         DService.AddonLifecycle.RegisterListener(AddonEvent.PostSetup,           "FriendList", OnAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PostRequestedUpdate, "FriendList", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PreRequestedUpdate,  "FriendList", OnAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PreFinalize,         "FriendList", OnAddon);
         if (IsAddonAndNodesReady(FriendList)) 
             OnAddon(AddonEvent.PostSetup, null);
 
         DService.ContextMenu.OnMenuOpened += OnContextMenu;
     }
-    
+
+    protected override void ConfigUI()
+    {
+        if (ImGui.Checkbox(GetLoc("OptimizedFriendList-IgnorGroup"), ref ModuleConfig.IgnoreSpecificGroup))
+            SaveConfig(ModuleConfig);
+
+        if (ModuleConfig.IgnoreSpecificGroup)
+        {
+            using (ImRaii.PushId("IgnoredClass"))
+            using (ImRaii.PushIndent())
+            {
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupNone")}", ref ModuleConfig.IgnoredGroup[0]))
+                    SaveConfig(ModuleConfig);
+                ImGui.SameLine(150);
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}1", ref ModuleConfig.IgnoredGroup[1]))
+                    SaveConfig(ModuleConfig);
+
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}2", ref ModuleConfig.IgnoredGroup[2]))
+                    SaveConfig(ModuleConfig);
+                ImGui.SameLine(150);
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}3", ref ModuleConfig.IgnoredGroup[3]))
+                    SaveConfig(ModuleConfig);
+
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}4", ref ModuleConfig.IgnoredGroup[4]))
+                    SaveConfig(ModuleConfig);
+                ImGui.SameLine(150);
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}5", ref ModuleConfig.IgnoredGroup[5]))
+                    SaveConfig(ModuleConfig);
+
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}6", ref ModuleConfig.IgnoredGroup[6]))
+                    SaveConfig(ModuleConfig);
+                ImGui.SameLine(150);
+                if (ImGui.Checkbox($"{GetLoc("OptimizedFriendList-IgnorGroupClass")}7", ref ModuleConfig.IgnoredGroup[7]))
+                    SaveConfig(ModuleConfig);
+            }
+        }
+    }
+
     private static void OnContextMenu(IMenuOpenedArgs args)
     {
         if (ModifyInfoItem.IsDisplay(args))
@@ -88,6 +135,14 @@ public unsafe class OptimizedFriendList : DailyModuleBase
         switch (type)
         {
             case AddonEvent.PostSetup:
+                if (FriendList != null)
+                {
+                    CreateSearchNode();
+                    CreatSearchLayout();
+
+                    searchString = string.Empty;
+                }
+
                 if (Throttler.Throttle("OptimizedFriendList-OnRequestFriendList", 10_000))
                 {
                     var agent = AgentFriendlist.Instance();
@@ -128,7 +183,28 @@ public unsafe class OptimizedFriendList : DailyModuleBase
             case AddonEvent.PostRequestedUpdate:
                 Modify(TaskHelper);
                 break;
+            case AddonEvent.PreRequestedUpdate:
+                ApplyFilters(searchString);
+                break;
             case AddonEvent.PreFinalize:
+                if (SearchInputNode != null)
+                {
+                    Service.AddonController.DetachNode(SearchInputNode);
+                    SearchInputNode = null;
+                }
+
+                if (SearchLayoutNode != null)
+                {
+                    Service.AddonController.DetachNode(SearchLayoutNode);
+                    Service.AddonController.DetachNode(nameCheckboxNode);
+                    Service.AddonController.DetachNode(nicknameCheckboxNode);
+                    Service.AddonController.DetachNode(remakerCheckboxNode);
+                    SearchLayoutNode = null;
+                    nameCheckboxNode = null;
+                    nicknameCheckboxNode = null;
+                    remakerCheckboxNode = null;
+                }
+
                 Tokens.ForEach(x => OnlineDataManager.GetRequest<PlayerUsedNamesRequest>().Unsubscribe(x));
                 Tokens.Clear();
                 
@@ -254,6 +330,154 @@ public unsafe class OptimizedFriendList : DailyModuleBase
         });
     }
 
+    private static bool MatchesSearch(string filter)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (string.IsNullOrWhiteSpace(filter)) return false;
+        if (searchString.StartsWith('^')) return filter.StartsWith(searchString[1..], StringComparison.InvariantCultureIgnoreCase);
+        if (searchString.EndsWith('$')) return filter.EndsWith(searchString[..^1], StringComparison.InvariantCultureIgnoreCase);
+        return filter.Contains(searchString, StringComparison.InvariantCultureIgnoreCase);
+    }
+
+    private static void CreatSearchLayout()
+    {
+        nameCheckboxNode ??= new CheckboxNode()
+        {
+            Size = new(80f, 20f),
+            IsVisible = true,
+            IsChecked = true,
+            IsEnabled = true,
+            LabelText = GetLoc("OptimizedFriendList-SearchTypeName"),
+            OnClick = newState =>
+            {
+                ApplyFilters(searchString);
+            },
+        };
+
+        nicknameCheckboxNode ??= new CheckboxNode()
+        {
+            Size = new(80f, 20f),
+            IsVisible = true,
+            IsChecked = false,
+            IsEnabled = true,
+            LabelText = GetLoc("OptimizedFriendList-SearchTypeNickname"),
+            OnClick = newState =>
+            {
+                ApplyFilters(searchString);
+            },
+        };
+
+        remakerCheckboxNode ??= new CheckboxNode()
+        {
+            Size = new(80f, 20f),
+            IsVisible = true,
+            IsChecked = false,
+            IsEnabled = true,
+            LabelText = GetLoc("OptimizedFriendList-SearchTypeRemaker"),
+            OnClick = newState =>
+            {
+                ApplyFilters(searchString);
+            },
+        };
+
+        SearchLayoutNode = new HorizontalListNode()
+        {
+            Width = 240f,
+            IsVisible = true,
+            Position = new(215.0f, 505.0f),
+            Alignment = HorizontalListAnchor.Left,
+        };
+        SearchLayoutNode.AddNode(nameCheckboxNode, nicknameCheckboxNode, remakerCheckboxNode);
+
+        Service.AddonController.AttachNode(SearchLayoutNode, FriendList->RootNode);
+    }
+
+    private static void CreateSearchNode()
+    {
+        SearchInputNode ??= new TextInputNode
+        {
+            IsVisible = true,
+            Position = new(10f, 425f),
+            Size = new(200.0f, 35f),
+            MaxCharacters = 20,
+            ShowLimitText = true,
+            OnInputReceived = x =>
+            {
+                searchString = x.TextValue;
+                ApplyFilters(searchString);
+            },
+            OnInputComplete = x =>
+            {
+                searchString = x.TextValue;
+                ApplyFilters(searchString);
+            },
+        };
+
+        SearchInputNode.CursorNode.ScaleY = 1.4f;
+        SearchInputNode.CurrentTextNode.FontSize = 14;
+        SearchInputNode.CurrentTextNode.Y += 3f;
+
+        Service.AddonController.AttachNode(SearchInputNode, FriendList->GetNodeById(20));
+    }
+
+    protected static void ApplyFilters(string filter)
+    {
+        var info = InfoProxyFriendList.Instance();
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            info->ApplyFilters();
+            return;
+        }
+
+        var resets = new Dictionary<ulong, uint>();
+        var resetFilterGroup = info->FilterGroup;
+        info->FilterGroup = InfoProxyCommonList.DisplayGroup.None;
+        var entryCount = info->GetEntryCount();
+
+        for (var i = 0; i < info->EntryCount; i++)
+        {
+            var entry = info->GetEntry((uint)i);
+            var data = info->CharDataSpan[i];
+            if (entry == null) continue;
+            resets.Add(entry->ContentId, entry->ExtraFlags);
+
+            if (ModuleConfig.IgnoreSpecificGroup && ModuleConfig.IgnoredGroup[(int)entry->Group])
+            {
+                entry->ExtraFlags = (entry->ExtraFlags & 0xFFFF) | ((uint)(1 & 0xFF) << 16);//添加隐藏标记
+                continue;
+            }
+
+            var matchResult = false;
+            PlayerInfo configInfo = null;
+
+            if (nameCheckboxNode.IsChecked)
+                matchResult |= MatchesSearch(entry->NameString);
+            if (nicknameCheckboxNode.IsChecked)
+            {
+                if (ModuleConfig.PlayerInfos.TryGetValue(data.ContentId, out configInfo))
+                    matchResult |= MatchesSearch(configInfo.Nickname);
+            }
+            if (remakerCheckboxNode.IsChecked)
+            {
+                if (ModuleConfig.PlayerInfos.TryGetValue(data.ContentId, out configInfo))
+                    matchResult |= MatchesSearch(configInfo.Remark);
+            }
+
+            if ((resetFilterGroup == InfoProxyCommonList.DisplayGroup.All || entry->Group == resetFilterGroup) && matchResult)
+                entry->ExtraFlags &= 0xFFFF;//去除隐藏标记
+            else
+                entry->ExtraFlags = (entry->ExtraFlags & 0xFFFF) | ((uint)(1 & 0xFF) << 16);
+        }
+        info->ApplyFilters();
+
+        info->FilterGroup = resetFilterGroup;
+        foreach (var pair in resets)
+        {
+            var entry = info->GetEntryByContentId(pair.Key);
+            entry->ExtraFlags = pair.Value;
+        }
+    }
+
     protected override void Uninit()
     {
         DService.ContextMenu.OnMenuOpened -= OnContextMenu;
@@ -271,6 +495,8 @@ public unsafe class OptimizedFriendList : DailyModuleBase
     private class Config : ModuleConfiguration
     {
         public Dictionary<ulong, PlayerInfo> PlayerInfos = [];
+        public bool IgnoreSpecificGroup = false;
+        public bool[] IgnoredGroup = new bool[8];
     }
 
     private class DRFriendlistRemarkEdit(DailyModuleBase instance) : NativeAddon
@@ -513,6 +739,8 @@ public unsafe class OptimizedFriendList : DailyModuleBase
             }
             else
                 Addon.OpenWithData(target.TargetContentId, target.TargetName, target.TargetHomeWorld.Value.Name.ExtractText());
+
+            ApplyFilters(searchString);
         }
     }
     

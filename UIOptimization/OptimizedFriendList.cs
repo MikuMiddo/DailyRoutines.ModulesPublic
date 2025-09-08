@@ -40,15 +40,13 @@ public unsafe class OptimizedFriendList : DailyModuleBase
 
     private static Config ModuleConfig = null!;
 
-    private static TextInputNode? SearchInputNode;
-    private static CheckboxNode? nameCheckboxNode;
-    private static CheckboxNode? nicknameCheckboxNode;
-    private static CheckboxNode? remakerCheckboxNode;
-    private static HorizontalListNode? SearchLayoutNode;
-
-    private static string searchString = string.Empty;
+    private static TextInputNode?      SearchInputNode;
+    private static TextureButtonNode?  SearchSettingButtonNode;
 
     private static DRFriendlistRemarkEdit? Addon;
+    private static DRFriendlistSearchTypeSetting? SearchTypeAddon;
+    
+    private static string SearchString = string.Empty;
     
     private static readonly List<nint>                             Utf8Strings = [];
     private static readonly List<PlayerUsedNamesSubscriptionToken> Tokens      = [];
@@ -64,6 +62,15 @@ public unsafe class OptimizedFriendList : DailyModuleBase
             InternalName          = "DRFriendlistRemarkEdit",
             Title                 = GetLoc("OptimizedFriendList-ContextMenu-NicknameAndRemark"),
             Size                  = new(460f, 255f),
+            Position              = new(800f, 350f),
+            NativeController      = Service.AddonController,
+            RememberClosePosition = true
+        };
+        SearchTypeAddon ??= new(this)
+        {
+            InternalName          = "DRFriendlistSearchTypeEdit",
+            Title                 = GetLoc("OptimizedFriendList-AddonPlane-SearchTypeSetting"),
+            Size                  = new(200f, 120f),
             Position              = new(800f, 350f),
             NativeController      = Service.AddonController,
             RememberClosePosition = true
@@ -137,12 +144,57 @@ public unsafe class OptimizedFriendList : DailyModuleBase
             case AddonEvent.PostSetup:
                 if (FriendList != null)
                 {
-                    CreateSearchNode();
-                    CreatSearchLayout();
+                    SearchInputNode ??= new()
+                    {
+                        IsVisible     = true,
+                        Position      = new(10f, 425f),
+                        Size          = new(200.0f, 35f),
+                        MaxCharacters = 20,
+                        ShowLimitText = true,
+                        OnInputReceived = x =>
+                        {
+                            SearchString = x.TextValue;
+                            ApplyFilters(SearchString);
+                        },
+                        OnInputComplete = x =>
+                        {
+                            SearchString = x.TextValue;
+                            ApplyFilters(SearchString);
+                        },
+                    };
 
-                    searchString = string.Empty;
+                    SearchInputNode.CursorNode.ScaleY        =  1.4f;
+                    SearchInputNode.CurrentTextNode.FontSize =  14;
+                    SearchInputNode.CurrentTextNode.Y        += 3f;
+
+                    Service.AddonController.AttachNode(SearchInputNode, FriendList->GetNodeById(20));
+                    
+                    SearchSettingButtonNode ??= new()
+                    {
+                        Position  = new(215f, 430f),
+                        Size      = new(25f, 25f),
+                        IsVisible = true,
+                        IsChecked = ModuleConfig.SearchName,
+                        IsEnabled = true,
+                        TexturePath = "ui/uld/CircleButtons_hr1.tex",
+                        TextureSize = new(28, 28),
+                        OnClick   = ()  => 
+                        {
+                            if (SearchTypeAddon.IsOpen)
+                                SearchTypeAddon.Close();
+                            else
+                            {
+                                SearchTypeAddon.Position = new(SearchSettingButtonNode.ScreenX + 25,SearchSettingButtonNode.ScreenY - 60);
+                                SearchTypeAddon.Open();
+                            }   
+                        },
+                    };
+
+                    Service.AddonController.AttachNode(SearchSettingButtonNode, FriendList->GetNodeById(20));
+
+                    SearchString = string.Empty;
                 }
-
+                
                 if (Throttler.Throttle("OptimizedFriendList-OnRequestFriendList", 10_000))
                 {
                     var agent = AgentFriendlist.Instance();
@@ -184,7 +236,7 @@ public unsafe class OptimizedFriendList : DailyModuleBase
                 Modify(TaskHelper);
                 break;
             case AddonEvent.PreRequestedUpdate:
-                ApplyFilters(searchString);
+                ApplyFilters(SearchString);
                 break;
             case AddonEvent.PreFinalize:
                 CleanSearchNodes();
@@ -316,92 +368,19 @@ public unsafe class OptimizedFriendList : DailyModuleBase
 
     private static bool MatchesSearch(string filter)
     {
-        if (string.IsNullOrWhiteSpace(searchString)) return true;
-        if (string.IsNullOrWhiteSpace(filter)) return false;
-        if (searchString.StartsWith('^')) return filter.StartsWith(searchString[1..], StringComparison.InvariantCultureIgnoreCase);
-        if (searchString.EndsWith('$')) return filter.EndsWith(searchString[..^1], StringComparison.InvariantCultureIgnoreCase);
-        return filter.Contains(searchString, StringComparison.InvariantCultureIgnoreCase);
-    }
-
-    private static void CreatSearchLayout()
-    {
-        nameCheckboxNode ??= new CheckboxNode()
-        {
-            Size = new(80f, 20f),
-            IsVisible = true,
-            IsChecked = true,
-            IsEnabled = true,
-            LabelText = GetLoc("OptimizedFriendList-SearchTypeName"),
-            OnClick = newState =>
-            {
-                ApplyFilters(searchString);
-            },
-        };
-
-        nicknameCheckboxNode ??= new CheckboxNode()
-        {
-            Size = new(80f, 20f),
-            IsVisible = true,
-            IsChecked = false,
-            IsEnabled = true,
-            LabelText = GetLoc("OptimizedFriendList-SearchTypeNickname"),
-            OnClick = newState =>
-            {
-                ApplyFilters(searchString);
-            },
-        };
-
-        remakerCheckboxNode ??= new CheckboxNode()
-        {
-            Size = new(80f, 20f),
-            IsVisible = true,
-            IsChecked = false,
-            IsEnabled = true,
-            LabelText = GetLoc("OptimizedFriendList-SearchTypeRemaker"),
-            OnClick = newState =>
-            {
-                ApplyFilters(searchString);
-            },
-        };
-
-        SearchLayoutNode = new HorizontalListNode()
-        {
-            Width = 240f,
-            IsVisible = true,
-            Position = new(215.0f, 505.0f),
-            Alignment = HorizontalListAnchor.Left,
-        };
-        SearchLayoutNode.AddNode(nameCheckboxNode, nicknameCheckboxNode, remakerCheckboxNode);
-
-        Service.AddonController.AttachNode(SearchLayoutNode, FriendList->RootNode);
-    }
-
-    private static void CreateSearchNode()
-    {
-        SearchInputNode ??= new TextInputNode
-        {
-            IsVisible = true,
-            Position = new(10f, 425f),
-            Size = new(200.0f, 35f),
-            MaxCharacters = 20,
-            ShowLimitText = true,
-            OnInputReceived = x =>
-            {
-                searchString = x.TextValue;
-                ApplyFilters(searchString);
-            },
-            OnInputComplete = x =>
-            {
-                searchString = x.TextValue;
-                ApplyFilters(searchString);
-            },
-        };
-
-        SearchInputNode.CursorNode.ScaleY = 1.4f;
-        SearchInputNode.CurrentTextNode.FontSize = 14;
-        SearchInputNode.CurrentTextNode.Y += 3f;
-
-        Service.AddonController.AttachNode(SearchInputNode, FriendList->GetNodeById(20));
+        if (string.IsNullOrWhiteSpace(SearchString)) 
+            return true;
+        
+        if (string.IsNullOrWhiteSpace(filter)) 
+            return false;
+        
+        if (SearchString.StartsWith('^')) 
+            return filter.StartsWith(SearchString[1..], StringComparison.InvariantCultureIgnoreCase);
+        
+        if (SearchString.EndsWith('$')) 
+            return filter.EndsWith(SearchString[..^1], StringComparison.InvariantCultureIgnoreCase);
+        
+        return filter.Contains(SearchString, StringComparison.InvariantCultureIgnoreCase);
     }
 
     private static void CleanSearchNodes()
@@ -409,17 +388,9 @@ public unsafe class OptimizedFriendList : DailyModuleBase
         Service.AddonController.DetachNode(SearchInputNode);
         SearchInputNode = null;
 
-        Service.AddonController.DetachNode(SearchLayoutNode);
-        SearchLayoutNode = null;
+        Service.AddonController.DetachNode(SearchSettingButtonNode);
+        SearchSettingButtonNode = null;
 
-        Service.AddonController.DetachNode(nameCheckboxNode);
-        nameCheckboxNode = null;
-
-        Service.AddonController.DetachNode(nicknameCheckboxNode);
-        nicknameCheckboxNode = null;
-
-        Service.AddonController.DetachNode(remakerCheckboxNode);
-        remakerCheckboxNode = null;
     }
 
     protected static void ApplyFilters(string filter)
@@ -434,45 +405,83 @@ public unsafe class OptimizedFriendList : DailyModuleBase
         var resets = new Dictionary<ulong, uint>();
         var resetFilterGroup = info->FilterGroup;
         info->FilterGroup = InfoProxyCommonList.DisplayGroup.None;
+        
         var entryCount = info->GetEntryCount();
-
-        for (var i = 0; i < info->EntryCount; i++)
+        for (var i = 0; i < entryCount; i++)
         {
             var entry = info->GetEntry((uint)i);
-            var data = info->CharDataSpan[i];
             if (entry == null) continue;
+            
+            var data = info->CharDataSpan[i];
             resets.Add(entry->ContentId, entry->ExtraFlags);
 
             if (ModuleConfig.IgnoreSpecificGroup && ModuleConfig.IgnoredGroup[(int)entry->Group])
             {
-                entry->ExtraFlags = (entry->ExtraFlags & 0xFFFF) | ((uint)(1 & 0xFF) << 16);// 添加隐藏标记
+                entry->ExtraFlags = (entry->ExtraFlags & 0xFFFF) | ((uint)(1 & 0xFF) << 16); // 添加隐藏标记
                 continue;
             }
 
             var matchResult = false;
             PlayerInfo configInfo = null;
+            
+            if (ModuleConfig.SearchName)
+            {
+                var NameString = entry->NameString;
+                if (string.IsNullOrEmpty(entry->NameString)) // 搜索会导致非本大区角色被重新刷新为（无法获得角色情报） 需要重新配置
+                {
+                    var token = OnlineDataManager.GetRequest<PlayerInfoRequest>().Subscribe(data.ContentId, OnlineDataManager.GetWorldRegion(GameState.HomeWorld),(name, worldID) =>
+                    {
+                        var nameBuilder = new SeStringBuilder();
+                        nameBuilder.AddUiForeground($"{name}", 32);
+                    
+                        var nameString = Utf8String.FromSequence(nameBuilder.Build().Encode());
+                        Utf8Strings.Add((nint)nameString);
+                    
+                        AtkStage.Instance()->GetStringArrayData(StringArrayType.FriendList)->StringArray[0 + (5 * i)] = nameString->StringPtr;
 
-            if (nameCheckboxNode.IsChecked)
-                matchResult |= MatchesSearch(entry->NameString);
-            if (nicknameCheckboxNode.IsChecked)
+                        var worldBuilder = new SeStringBuilder();
+                        worldBuilder.AddIcon(BitmapFontIcon.CrossWorld);
+                        worldBuilder.Append($"{LuminaWrapper.GetWorldName(worldID)} ({LuminaWrapper.GetWorldDCName(worldID)})");
+                    
+                        var worldString = Utf8String.FromSequence(worldBuilder.Build().Encode());
+                        Utf8Strings.Add((nint)worldString);
+                    
+                        AtkStage.Instance()->GetStringArrayData(StringArrayType.FriendList)->StringArray[1 + (5 * i)] = worldString->StringPtr;
+                    
+                        var onlineStatusString = Utf8String.FromString(LuminaWrapper.GetAddonText(1351));
+                        Utf8Strings.Add((nint)onlineStatusString);
+                    
+                        AtkStage.Instance()->GetStringArrayData(StringArrayType.FriendList)->StringArray[3 + (5 * i)] = onlineStatusString->StringPtr;
+
+                        NameString = name;
+                    });
+                    InfoTokens.Add(token);
+                }
+
+                matchResult |= MatchesSearch(NameString);
+            } 
+            
+            if (ModuleConfig.SearchNickName)
             {
                 if (ModuleConfig.PlayerInfos.TryGetValue(data.ContentId, out configInfo))
                     matchResult |= MatchesSearch(configInfo.Nickname);
             }
-            if (remakerCheckboxNode.IsChecked)
+            
+            if (ModuleConfig.SearchRemaker)
             {
                 if (ModuleConfig.PlayerInfos.TryGetValue(data.ContentId, out configInfo))
                     matchResult |= MatchesSearch(configInfo.Remark);
             }
 
             if ((resetFilterGroup == InfoProxyCommonList.DisplayGroup.All || entry->Group == resetFilterGroup) && matchResult)
-                entry->ExtraFlags &= 0xFFFF;// 去除隐藏标记
+                entry->ExtraFlags &= 0xFFFF; // 去除隐藏标记
             else
                 entry->ExtraFlags = (entry->ExtraFlags & 0xFFFF) | ((uint)(1 & 0xFF) << 16);
         }
+        
         info->ApplyFilters();
-
         info->FilterGroup = resetFilterGroup;
+        
         foreach (var pair in resets)
         {
             var entry = info->GetEntryByContentId(pair.Key);
@@ -483,13 +492,13 @@ public unsafe class OptimizedFriendList : DailyModuleBase
     protected override void Uninit()
     {
         DService.ContextMenu.OnMenuOpened -= OnContextMenu;
+        
         DService.AddonLifecycle.UnregisterListener(OnAddon);
+        OnAddon(AddonEvent.PreFinalize, null);
         
         Addon?.Dispose();
         Addon = null;
-
-        OnAddon(AddonEvent.PreFinalize, null);
-
+        
         if (IsAddonAndNodesReady(FriendList))
             InfoProxyFriendList.Instance()->RequestData();
     }
@@ -497,7 +506,12 @@ public unsafe class OptimizedFriendList : DailyModuleBase
     private class Config : ModuleConfiguration
     {
         public Dictionary<ulong, PlayerInfo> PlayerInfos = [];
-        public bool IgnoreSpecificGroup = false;
+        
+        public bool   SearchName = true;
+        public bool   SearchNickName = false;
+        public bool   SearchRemaker = false;
+
+        public bool   IgnoreSpecificGroup = false;
         public bool[] IgnoredGroup = new bool[8];
     }
 
@@ -717,6 +731,80 @@ public unsafe class OptimizedFriendList : DailyModuleBase
             Open();
         }
     }
+
+    private class DRFriendlistSearchTypeSetting(DailyModuleBase instance) : NativeAddon
+    {
+        private DailyModuleBase Instance { get; init; } = instance;
+
+        private static CheckboxNode       NameCheckboxNode;
+        private static CheckboxNode       NicknameCheckboxNode;
+        private static CheckboxNode       RemakerCheckboxNode;
+        private static VerticalListNode   SearchLayoutNode;
+
+        protected override unsafe void OnSetup(AtkUnitBase* addon)
+        {
+            NameCheckboxNode = new()
+            {
+                Size      = new(80f, 20f),
+                IsVisible = true,
+                IsChecked = ModuleConfig.SearchName,
+                IsEnabled = true,
+                LabelText = GetLoc("OptimizedFriendList-SearchTypeName"),
+                OnClick   = newState  => 
+                {
+                    ModuleConfig.SearchName = newState;
+                    ModuleConfig.Save(Instance);
+                    ApplyFilters(SearchString);
+                },
+            };
+
+            NicknameCheckboxNode = new()
+            {
+                Size      = new(80f, 20f),
+                IsVisible = true,
+                IsChecked = ModuleConfig.SearchNickName,
+                IsEnabled = true,
+                LabelText = GetLoc("OptimizedFriendList-SearchTypeNickname"),
+                OnClick   = newState  => 
+                {
+                    ModuleConfig.SearchNickName = newState;
+                    ModuleConfig.Save(Instance);
+                    ApplyFilters(SearchString);
+                },
+            };
+
+            RemakerCheckboxNode = new()
+            {
+                Size      = new(80f, 20f),
+                IsVisible = true,
+                IsChecked = ModuleConfig.SearchRemaker,
+                IsEnabled = true,
+                LabelText = GetLoc("OptimizedFriendList-SearchTypeRemaker"),
+                OnClick   = newState  => 
+                {
+                    ModuleConfig.SearchRemaker = newState;
+                    ModuleConfig.Save(Instance);
+                    ApplyFilters(SearchString);
+                },
+            };
+
+            SearchLayoutNode = new()
+            {
+                IsVisible = true,
+                Position = new(20f, 35f),
+                Alignment = VerticalListAnchor.Top,
+            };
+            SearchLayoutNode.AddNode(NameCheckboxNode, NicknameCheckboxNode, RemakerCheckboxNode);
+
+            AttachNode(SearchLayoutNode);
+        }
+
+        protected override unsafe void OnUpdate(AtkUnitBase* addon)
+        {
+            if (!IsAddonAndNodesReady(FriendList))
+                Close();
+        }
+    }
     
     private class ModifyInfoMenuItem(TaskHelper TaskHelper) : MenuItemBase
     {
@@ -742,7 +830,7 @@ public unsafe class OptimizedFriendList : DailyModuleBase
             else
                 Addon.OpenWithData(target.TargetContentId, target.TargetName, target.TargetHomeWorld.Value.Name.ExtractText());
 
-            ApplyFilters(searchString);
+            ApplyFilters(SearchString);
         }
     }
     

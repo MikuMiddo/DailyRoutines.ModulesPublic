@@ -121,7 +121,6 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
                     SaveConfig(ModuleConfig);
                 }
             }
-
             if (ModuleConfig.ShowResolvedActionId && ModuleConfig.ActionIdUseHex) 
                 ImGui.SameLine();             
             if (ModuleConfig.ShowResolvedActionId)
@@ -279,7 +278,7 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         var categoryText = addon->GetTextNodeById(6);
         if (categoryText == null) return ActionTooltipHook.Original(addon, a2, a3);
 
-        var seStr = new SeString(new TextPayload(categoryText->NodeText.ExtractText()));
+        var seStr = MemoryHelper.ReadSeStringNullTerminated((nint)categoryText->NodeText.StringPtr.Value);
         if (seStr.Payloads.Count > 1) return ActionTooltipHook.Original(addon, a2, a3);
 
         var id = ModuleConfig.ShowResolvedActionId ? ActionManager.Instance()->GetAdjustedActionId(HoveredActionid) : HoveredActionid;
@@ -321,9 +320,9 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
     
     private void TooltipBuffIdAdd(AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* tooltipArgs)
     {
-        var localPlayer = (IBattleChara)DService.ObjectTable.LocalPlayer;
         Dictionary<uint, uint> IconStatusIDMap = [];
 
+        var localPlayer = DService.ObjectTable.LocalPlayer;
         if (localPlayer == null || targetNode == null) return;
 
         var imageNode = targetNode->GetAsAtkImageNode();
@@ -335,32 +334,24 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         var rawStr = (string)tooltipArgs->Text;
         if (rawStr == null) return;
 
-        var statuId = 0u;
-
-        var currentTarget = (IBattleChara)DService.Targets.Target;
+        var currentTarget = DService.Targets.Target;
         if (currentTarget != null && currentTarget != localPlayer)
-            AddStatusesToMap(currentTarget.StatusList,ref IconStatusIDMap);
+            AddStatusesToMap(currentTarget.ToBCStruct()->StatusManager, ref IconStatusIDMap);
 
-        var focusTarget = (IBattleChara)DService.Targets.FocusTarget;
+        var focusTarget = DService.Targets.FocusTarget;
         if (focusTarget != null)
-            AddStatusesToMap(focusTarget.StatusList,ref IconStatusIDMap);
+            AddStatusesToMap(focusTarget.ToBCStruct()->StatusManager, ref IconStatusIDMap);
 
-        var partyList = DService.PartyList;
-        if (partyList != null)
+        var partyList = AgentHUD.Instance()->PartyMembers;
+        foreach (var member in partyList.ToArray().Where(m => m.Index != 0))
         {
-            foreach (var member in partyList.Where(m => m.ObjectId != 0))
-            {
-                var Omember = IBattleChara.Create(member.GameObject.Address);
-                if (Omember != null) 
-                    AddStatusesToMap(Omember.StatusList,ref IconStatusIDMap);
-            }
+            if (member.Object != null)
+                AddStatusesToMap(member.Object->StatusManager, ref IconStatusIDMap);
         }
-        
-        AddStatusesToMap(localPlayer.StatusList,ref IconStatusIDMap);
 
-        if (IconStatusIDMap.TryGetValue(iconId, out var value))
-            statuId = value;
-        else return;
+        AddStatusesToMap(localPlayer.ToBCStruct()->StatusManager, ref IconStatusIDMap);
+
+        if (!IconStatusIDMap.TryGetValue(iconId, out var statuId)) return;
 
         if (rawStr.Contains($"[{statuId}]") || statuId == 0) return;
 
@@ -391,9 +382,9 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         }
     }
 
-    private static unsafe void AddStatusesToMap(StatusList statusesList,ref Dictionary<uint, uint> map)
+    private static unsafe void AddStatusesToMap(StatusManager statusesManager,ref Dictionary<uint, uint> map)
     {
-        foreach (var statuse in statusesList)
+        foreach (var statuse in statusesManager.Status)
         {
             if (statuse.StatusId == 0) continue;
             if (!LuminaGetter.TryGetRow<RowStatus>(statuse.StatusId, out var status))

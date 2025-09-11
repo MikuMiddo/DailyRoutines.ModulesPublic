@@ -72,40 +72,63 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         TooltipShowHook ??= TooltipShowSig.GetHook<TooltipShowDelegate>(OnTooltipShowDetour);
         TooltipShowHook.Enable();
 
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh, "ActionDetail", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh, "ItemDetail", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh,       "ActionDetail", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh,         "ItemDetail", OnAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw, "_TargetInfoMainTarget", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw, "_NaviMap", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,              "_NaviMap", OnAddon);
     }
 
     protected override void ConfigUI()
     {
         using (ImRaii.Group())
         {
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-UseHexID"), ref ModuleConfig.UseHexID))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowItemId"), ref ModuleConfig.ShowItemId))
                 SaveConfig(ModuleConfig);
-            if (ModuleConfig.UseHexID)
+            ImGui.SameLine();
+            if (ModuleConfig.ShowItemId)
             {
-                ImGui.SameLine();
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-UseBothHexAndDecimal"), ref ModuleConfig.UseBothHexAndDecimal))
-                {
-                    ModuleConfig.ShowOriginalActionId = false;
+                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ItemIdUseHexId"), ref ModuleConfig.ItemIdUseHexId))
                     SaveConfig(ModuleConfig);
+                if (ModuleConfig.ItemIdUseHexId)
+                {
+                    ImGui.SameLine();
+                    if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ItemIdUseBothHexAndDecimal"), ref ModuleConfig.ItemIdUseBothHexAndDecimal))
+                        SaveConfig(ModuleConfig);
                 }
             }
         }
 
         using (ImRaii.Group())
         {
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowResolvedActionId"), ref ModuleConfig.ShowResolvedActionId))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowActionId"), ref ModuleConfig.ShowActionId))
                 SaveConfig(ModuleConfig);
-
-            if (ModuleConfig.ShowResolvedActionId)
+            if (ModuleConfig.ShowActionId)
             {
                 ImGui.SameLine();
+                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ActionIdUseHex"), ref ModuleConfig.ActionIdUseHex))
+                    SaveConfig(ModuleConfig);
+                ImGui.SameLine();
+                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowResolvedActionId"), ref ModuleConfig.ShowResolvedActionId))
+                    SaveConfig(ModuleConfig);               
+            }
+
+            ImRaii.PushIndent(2);
+            if (ModuleConfig.ActionIdUseHex)
+            {
+                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ActionIdUseBothHexAndDecimal"), ref ModuleConfig.ActionIdUseBothHexAndDecimal))
+                {
+                    ModuleConfig.ShowOriginalActionId = false;
+                    SaveConfig(ModuleConfig);
+                }
+            }
+
+            if (ModuleConfig.ShowResolvedActionId && ModuleConfig.ActionIdUseHex) 
+                ImGui.SameLine();             
+            if (ModuleConfig.ShowResolvedActionId)
+            {
                 if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowOriginalActionId"), ref ModuleConfig.ShowOriginalActionId))
                 {
-                    ModuleConfig.UseBothHexAndDecimal = false;
+                    ModuleConfig.ActionIdUseBothHexAndDecimal = false;
                     SaveConfig(ModuleConfig);
                 }  
             }
@@ -113,7 +136,6 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
         using (ImRaii.Group())
         {
-
             if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowTargetId"), ref ModuleConfig.ShowTargetId))
                 SaveConfig(ModuleConfig);
             ImGui.SameLine();
@@ -213,6 +235,8 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
     public void* OnGenerateItemTooltipDetour(AtkUnitBase* addonItemDetail, NumberArrayData* numberArrayData, StringArrayData* stringArrayData) 
     {
+        if (!ModuleConfig.ShowItemId) return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData); 
+
         var seStr = MemoryHelper.ReadSeStringNullTerminated((nint)stringArrayData->StringArray[2]); // 此处与下方set函数中的 2 均为ItemUiCategory在tooltip中的索引
         if (seStr == null) return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData);
         if (seStr.TextValue.EndsWith(']')) return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData);
@@ -223,12 +247,12 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
         seStr.Payloads.Add(new UIForegroundPayload(3));
         seStr.Payloads.Add(new TextPayload("   ["));
-        if (ModuleConfig.UseHexID == false || ModuleConfig.UseBothHexAndDecimal) 
+        if (ModuleConfig.ItemIdUseHexId == false || ModuleConfig.ItemIdUseBothHexAndDecimal) 
             seStr.Payloads.Add(new TextPayload($"{id}"));
 
-        if (ModuleConfig.UseHexID) 
+        if (ModuleConfig.ItemIdUseHexId) 
         {
-            if (ModuleConfig.UseBothHexAndDecimal) 
+            if (ModuleConfig.ItemIdUseBothHexAndDecimal) 
                 seStr.Payloads.Add(new TextPayload(" - "));
             seStr.Payloads.Add(new TextPayload($"0x{id:X}"));
         }
@@ -250,6 +274,8 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
     private nint OnActionTooltipDetour(AtkUnitBase* addon, void* a2, ulong a3) 
     {
+        if(!ModuleConfig.ShowActionId) return ActionTooltipHook.Original(addon, a2, a3);
+
         var categoryText = addon->GetTextNodeById(6);
         if (categoryText == null) return ActionTooltipHook.Original(addon, a2, a3);
 
@@ -259,7 +285,7 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         var id = ModuleConfig.ShowResolvedActionId ? ActionManager.Instance()->GetAdjustedActionId(HoveredActionid) : HoveredActionid;
         if (seStr.Payloads.Count >= 1) 
             {
-            if (ModuleConfig is { ShowResolvedActionId:true, ShowOriginalActionId:true, UseBothHexAndDecimal:false} && id != HoveredActionid)
+            if (ModuleConfig is { ShowResolvedActionId:true, ShowOriginalActionId:true, ActionIdUseBothHexAndDecimal:false} && id != HoveredActionid)
                 seStr.Payloads.Add(new NewLinePayload());
             else
                 seStr.Payloads.Add(new TextPayload("   "));
@@ -268,20 +294,20 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         seStr.Payloads.Add(new UIForegroundPayload(3));
         seStr.Payloads.Add(new TextPayload("["));
 
-        if (ModuleConfig is { ShowResolvedActionId: true, ShowOriginalActionId: true, UseBothHexAndDecimal: false } && id != HoveredActionid)
+        if (ModuleConfig is { ShowResolvedActionId: true, ShowOriginalActionId: true, ActionIdUseBothHexAndDecimal: false } && id != HoveredActionid)
         {
-            if(ModuleConfig.UseHexID)
+            if(ModuleConfig.ActionIdUseHex)
                 seStr.Payloads.Add(new TextPayload($"0x{HoveredActionid:X}→"));
             else
                 seStr.Payloads.Add(new TextPayload($"{HoveredActionid}→"));
         }
 
-        if (!ModuleConfig.UseHexID || ModuleConfig.UseBothHexAndDecimal)
+        if (!ModuleConfig.ActionIdUseHex || ModuleConfig.ActionIdUseBothHexAndDecimal)
                 seStr.Payloads.Add(new TextPayload($"{id}"));
 
-        if (ModuleConfig.UseHexID) 
+        if (ModuleConfig.ActionIdUseHex) 
         {
-            if (ModuleConfig.UseBothHexAndDecimal) 
+            if (ModuleConfig.ActionIdUseBothHexAndDecimal) 
                 seStr.Payloads.Add(new TextPayload(" - "));
             seStr.Payloads.Add(new TextPayload($"0x{id:X}"));
         }
@@ -389,7 +415,7 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
             ptr[i] = bytes[i];
 
         cStringPointer = ptr;
-}
+    }
 
     protected override void Uninit()
     {
@@ -406,21 +432,24 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
     public class Config : ModuleConfiguration
     {
-        public bool UseHexID              = false;
-        public bool UseBothHexAndDecimal  = false;
+        public bool ShowItemId                   =  true;
+        public bool ItemIdUseHexId               = false;
+        public bool ItemIdUseBothHexAndDecimal   = false;
 
-        public bool ShowResolvedActionId  = false;
-        public bool ShowOriginalActionId  = false;
+        public bool ShowActionId                 =  true;
+        public bool ActionIdUseHex               = false;
+        public bool ActionIdUseBothHexAndDecimal = false;
+        public bool ShowResolvedActionId         = false;
+        public bool ShowOriginalActionId         = false;
 
-        public bool ShowBuffId            = false;
-        public bool ShowWeatherId         = false;
-        public bool ShowMapId             = false;
-        public bool ShowTargetId          = false;
+        public bool ShowBuffId                   = false;
+        public bool ShowWeatherId                = false;
+        public bool ShowMapId                    = false;
+        public bool ShowTargetId                 = false;
 
-        public bool ShowBattleNpcTargetId = false;
-        public bool ShowCompanionTargetId = false;
-        public bool ShowEventNpcTargetId  = false;
-        public bool ShowOthersTargetId    = false;
+        public bool ShowBattleNpcTargetId        = false;
+        public bool ShowCompanionTargetId        = false;
+        public bool ShowEventNpcTargetId         = false;
+        public bool ShowOthersTargetId           = false;
     }
-
 }

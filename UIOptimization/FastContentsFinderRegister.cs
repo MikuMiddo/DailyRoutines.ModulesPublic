@@ -14,9 +14,9 @@ public unsafe class FastContentsFinderRegister : DailyModuleBase
 {
     public override ModuleInfo Info { get; } = new()
     {
-        Title       = GetLoc("FastContentsFinderRegisterTitle"),
-        Description = GetLoc("FastContentsFinderRegisterDescription"),
-        Category    = ModuleCategories.UIOptimization,
+        Title               = GetLoc("FastContentsFinderRegisterTitle"),
+        Description         = GetLoc("FastContentsFinderRegisterDescription"),
+        Category            = ModuleCategories.UIOptimization,
         ModulesPrerequisite = ["ContentFinderCommand"]
     };
 
@@ -55,7 +55,7 @@ public unsafe class FastContentsFinderRegister : DailyModuleBase
         var cachedData = ContentFinderDataManager.GetCachedData();
         if (cachedData == null || cachedData.Items.Count == 0) return;
 
-        var lineHeight = ImGui.GetTextLineHeight() - ImGui.GetStyle().FramePadding.Y;
+        var lineHeight = ImGui.GetTextLineHeight() - (2 * ImGui.GetStyle().FramePadding.Y);
 
         HideLevelNodes();
         foreach (var item in cachedData.Items)
@@ -187,13 +187,13 @@ public unsafe class FastContentsFinderRegister : DailyModuleBase
     // 数据结构定义
     public class ContentFinderItemData
     {
-        public uint    NodeId    { get; set; }
-        public string  Name      { get; set; } = string.Empty;
-        public string  Level     { get; set; } = string.Empty;
-        public Vector2 Position  { get; set; }
-        public bool    IsLocked  { get; set; }
+        public uint    NodeId    { get; init; }
+        public string  Name      { get; init; } = string.Empty;
+        public string  Level     { get; init; } = string.Empty;
+        public Vector2 Position  { get; init; }
+        public bool    IsLocked  { get; init; }
         public bool    IsVisible { get; set; }
-        public string  CleanName { get; set; } = string.Empty;
+        public string  CleanName { get; init; } = string.Empty;
     }
 
     public class ContentFinderCacheData
@@ -281,7 +281,7 @@ public unsafe class FastContentsFinderRegister : DailyModuleBase
                         NodeId    = listItemComponent->NodeId,
                         Name      = name,
                         Level     = level,
-                        Position  = new(levelNode->ScreenX + (newData.CurrentTab == 0 ? 24f : 0f), levelNode->ScreenY - 8f),
+                        Position  = new(levelNode->ScreenX + (newData.CurrentTab == 0 ? 8f : -7f), levelNode->ScreenY - 8f),
                         IsLocked  = lockNode->IsVisible(),
                         IsVisible = levelNode->IsVisible(),
                         CleanName = name.Replace(" ", string.Empty)

@@ -46,7 +46,7 @@ public unsafe class AutoExpertDelivery : DailyModuleBase
         {
             InternalName          = "DRAutoExpertDelivery",
             Title                 = Info.Title,
-            Size                  = new(300f, 240f),
+            Size                  = new(300f, 250f),
             Position              = new(800f, 350f),
             NativeController      = Service.AddonController,
             RememberClosePosition = true,
@@ -236,7 +236,7 @@ public unsafe class AutoExpertDelivery : DailyModuleBase
             {
                 IsVisible = true,
                 Size      = new(275, 28),
-                Position  = new(15, 35),
+                Position  = ContentStartPosition - new Vector2(0, 10),
             };
 
             var tabContentPosition = tabNode.Position + new Vector2(0, tabNode.Size.Y + 5f);
@@ -318,7 +318,7 @@ public unsafe class AutoExpertDelivery : DailyModuleBase
             
             SettingTabLayout = new()
             {
-                Position    = tabContentPosition,
+                Position    = tabContentPosition + new Vector2(5, 3),
                 FitContents = true,
             };
 
@@ -429,14 +429,14 @@ public unsafe class AutoExpertDelivery : DailyModuleBase
                 return;
             }
 
-            var position = new Vector2(GrandCompanySupplyList->GetX() - 445, GrandCompanySupplyList->GetY());
+            var position = new Vector2(GrandCompanySupplyList->RootNode->ScreenX - addon->GetScaledWidth(true), GrandCompanySupplyList->RootNode->ScreenY);
             SetPosition(addon,           position);
             SetPosition(addon->RootNode, position);
         }
 
-        protected override void OnFinalize(AtkUnitBase* addon)
+        protected override void OnFinalize(AtkUnitBase* addon) 
         {
-            if (GrandCompanySupplyList == null) return;
+            if (GrandCompanySupplyList == null || Instance.TaskHelper.IsBusy) return;
             GrandCompanySupplyList->Close(true);
         }
     }

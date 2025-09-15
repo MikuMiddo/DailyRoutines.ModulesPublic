@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using DailyRoutines.Abstracts;
@@ -13,12 +14,12 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Hooking;
 using Dalamud.Interface;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Addon;
+using KamiToolKit.Classes.TimelineBuilding;
 using KamiToolKit.Nodes;
 using Lumina.Excel.Sheets;
 using ActionKind = FFXIVClientStructs.FFXIV.Client.UI.Agent.ActionKind;
@@ -29,33 +30,48 @@ public class OptimizedRecipeNote : DailyModuleBase
 {
     public override ModuleInfo Info { get; } = new()
     {
-        Title       = GetLoc("OptimizedRecipeNoteTitle"),
-        Description = GetLoc("OptimizedRecipeNoteDescription"),
-        Category    = ModuleCategories.UIOptimization
+        Title               = GetLoc("OptimizedRecipeNoteTitle"),
+        Description         = GetLoc("OptimizedRecipeNoteDescription"),
+        Category            = ModuleCategories.UIOptimization,
+        ModulesPrerequisite = ["BetterMarketBoard", "BetterTeleport"]
     };
 
     private static readonly Dictionary<uint, CaculationResult> CaculationResults = [];
+
+    private static readonly Dictionary<uint, List<Recipe>> SameItemRecipes =
+        LuminaGetter.Get<Recipe>()
+                    .GroupBy(x => x.ItemResult.RowId)
+                    .DistinctBy(x => x.Key)
+                    .Where(x => x.Key > 0 && x.Count() > 1)
+                    .ToDictionary(x => x.Key, x => x.DistinctBy(d => d.CraftType.RowId).ToList());
     
-    private static Hook<AgentReceiveEventDelegate>? AgentRecipeNoteReceiveEventHook;
+    private static TextButtonNode?    RecipeCaculationButton;
+    private static TextButtonNode?    SwitchJobButton;
+    private static TextureButtonNode? ClearSearchButton;
     
-    private static TextButtonNode? RecipeCaculationButton;
-    private static TextButtonNode? SwitchJobButton;
+    private static TextButtonNode?      DisplayOthersButton;
+    private static HorizontalListNode?  DisplayOthersIconsLayout;
+    private static List<IconButtonNode> DisplayOthersJobButtons = [];
+
+    private static List<IconButtonNode> GetShopInfoButtons = [];
+
+    private static TextButtonNode? LevelRecipeButton;
+    private static TextButtonNode? SpecialRecipeButton;
+    private static TextButtonNode? MasterRecipeButton;
     
     private static DalamudLinkPayload? InstallRaphaelLinkPayload;
     private static Task?               InstallRaphaelTask;
+
+    private static uint LastRecipeID;
     
-    protected override unsafe void Init()
+    protected override void Init()
     {
         TaskHelper ??= new() { TimeLimitMS = 15_000 };
         
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostSetup,   "RecipeNote", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,    "RecipeNote", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PreFinalize, "RecipeNote", OnAddon);
-
-        AgentRecipeNoteReceiveEventHook ??= DService.Hook.HookFromAddress<AgentReceiveEventDelegate>(
-            GetVFuncByName(AgentRecipeNote.Instance()->VirtualTable, "ReceiveEvent"),
-            AgentRecipeNoteReceiveEventDetour);
-        AgentRecipeNoteReceiveEventHook.Enable();
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostSetup,           "RecipeNote", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,            "RecipeNote", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRequestedUpdate, "RecipeNote", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PreFinalize,         "RecipeNote", OnAddon);
     }
 
     protected override void Uninit()
@@ -65,6 +81,9 @@ public class OptimizedRecipeNote : DailyModuleBase
         
         AddonActionsPreview.Addon?.Dispose();
         AddonActionsPreview.Addon = null;
+        
+        AddonShopsPreview.Addon?.Dispose();
+        AddonShopsPreview.Addon = null;
         
         CaculationResults.Values.ForEach(x =>
         {
@@ -88,11 +107,63 @@ public class OptimizedRecipeNote : DailyModuleBase
                 
                 Service.AddonController.DetachNode(SwitchJobButton);
                 SwitchJobButton = null;
+                
+                Service.AddonController.DetachNode(DisplayOthersButton);
+                DisplayOthersButton = null;
+                
+                Service.AddonController.DetachNode(DisplayOthersIconsLayout);
+                DisplayOthersIconsLayout = null;
+                
+                DisplayOthersJobButtons.ForEach(x => Service.AddonController.DetachNode(x));
+                DisplayOthersJobButtons.Clear();
+                
+                Service.AddonController.DetachNode(ClearSearchButton);
+                ClearSearchButton = null;
+                
+                GetShopInfoButtons.ForEach(x => Service.AddonController.DetachNode(x));
+                GetShopInfoButtons.Clear();
+                
+                Service.AddonController.DetachNode(LevelRecipeButton);
+                LevelRecipeButton = null;
+                
+                Service.AddonController.DetachNode(SpecialRecipeButton);
+                SpecialRecipeButton = null;
+                
+                Service.AddonController.DetachNode(MasterRecipeButton);
+                MasterRecipeButton = null;
+
+                if (InfosOm.RecipeNote != null)
+                {
+                    var resNode0 = InfosOm.RecipeNote->GetNodeById(95);
+                    if (resNode0 != null)
+                        resNode0->SetXFloat(46);
+
+                    var resNode1 = InfosOm.RecipeNote->GetNodeById(88);
+                    if (resNode1 != null)
+                        resNode1->SetXFloat(0);
+                    
+                    var resNode2 = InfosOm.RecipeNote->GetNodeById(84);
+                    if (resNode2 != null)
+                        resNode2->SetXFloat(0);
+                }
                 break;
             case AddonEvent.PostSetup:
                 if (AddonActionsPreview.Addon?.Nodes is not { Count: > 0 } nodes) return;
                     nodes.ForEach(x => x.Alpha = 1);
-                    break;
+                break;
+            case AddonEvent.PostRequestedUpdate:
+                try
+                {
+                    if (!AgentRecipeNote.Instance()->RecipeSearchOpen)
+                        LastRecipeID = RaphaelIPC.GetCurrentRecipeID();
+                    
+                    UpdateRecipeAddonButton();
+                }
+                catch
+                {
+                    // ignored
+                }
+                break;
             case AddonEvent.PostDraw:
                 if (InfosOm.RecipeNote == null) return;
 
@@ -108,22 +179,7 @@ public class OptimizedRecipeNote : DailyModuleBase
                     {
                         if (!IPCManager.IsIPCAvailable<RaphaelIPC>())
                         {
-                            InstallRaphaelLinkPayload ??= LinkPayloadManager.Register(OnClickInstallRaphaelPayload, out _);
-                            
-                            var message = new SeStringBuilder().AddIcon(BitmapFontIcon.Warning)
-                                                               .AddText($" {GetLoc("OptimizedRecipeNote-Message-InstallRapheal")}")
-                                                               .Add(NewLinePayload.Payload)
-                                                               .AddText($"{GetLoc("Operation")}: ")
-                                                               .Add(RawPayload.LinkTerminator)
-                                                               .Add(InstallRaphaelLinkPayload)
-                                                               .AddText("[")
-                                                               .AddUiForeground(35)
-                                                               .AddText($"{GetLoc("Enable")} / {GetLoc("Install")}")
-                                                               .AddUiForegroundOff()
-                                                               .AddText("]")
-                                                               .Add(RawPayload.LinkTerminator)
-                                                               .Build();
-                            Chat(message);
+                            PrintInstallRaphaelPluginMessage();
                             return;
                         }
 
@@ -183,22 +239,7 @@ public class OptimizedRecipeNote : DailyModuleBase
                     {
                         if (!IPCManager.IsIPCAvailable<RaphaelIPC>())
                         {
-                            InstallRaphaelLinkPayload ??= LinkPayloadManager.Register(OnClickInstallRaphaelPayload, out _);
-                            
-                            var message = new SeStringBuilder().AddIcon(BitmapFontIcon.Warning)
-                                                               .AddText($" {GetLoc("OptimizedRecipeNote-Message-InstallRapheal")}")
-                                                               .Add(NewLinePayload.Payload)
-                                                               .AddText($"{GetLoc("Operation")}: ")
-                                                               .Add(RawPayload.LinkTerminator)
-                                                               .Add(InstallRaphaelLinkPayload)
-                                                               .AddText("[")
-                                                               .AddUiForeground(35)
-                                                               .AddText($"{GetLoc("Enable")} / {GetLoc("Install")}")
-                                                               .AddUiForegroundOff()
-                                                               .AddText("]")
-                                                               .Add(RawPayload.LinkTerminator)
-                                                               .Build();
-                            Chat(message);
+                            PrintInstallRaphaelPluginMessage();
                             return;
                         }
 
@@ -221,6 +262,247 @@ public class OptimizedRecipeNote : DailyModuleBase
                     };
                     
                     Service.AddonController.AttachNode(SwitchJobButton, InfosOm.RecipeNote->GetNodeById(57));
+                }
+
+                if (DisplayOthersButton == null)
+                {
+                    DisplayOthersButton = new()
+                    {
+                        Position  = new(0, -32),
+                        Size      = new(140, 32),
+                        Label     = GetLoc("OptimizedRecipeNote-Button-ShowOtherRecipes"),
+                        IsVisible = true,
+                        OnClick = () =>
+                        {
+                            if (!IPCManager.IsIPCAvailable<RaphaelIPC>())
+                            {
+                                PrintInstallRaphaelPluginMessage();
+                                return;
+                            }
+
+                            var recipeID = RaphaelIPC.GetCurrentRecipeID();
+                            if (recipeID == 0                                            ||
+                                !LuminaGetter.TryGetRow(recipeID, out Recipe recipe)     ||
+                                recipe.ItemResult.Value is not { RowId: > 0 } resultItem ||
+                                !SameItemRecipes.TryGetValue(resultItem.RowId, out _))
+                                return;
+
+                            AgentRecipeNote.Instance()->SearchRecipeByItemId(resultItem.RowId);
+                        }
+                    };
+
+                    var labelNode = DisplayOthersButton.LabelNode;
+                    while (labelNode.FontSize > 1 && labelNode.GetTextDrawSize(labelNode.Text).X > labelNode.Size.X)
+                        labelNode.FontSize--;
+                    
+                    Service.AddonController.AttachNode(DisplayOthersButton, InfosOm.RecipeNote->GetNodeById(57));
+                }
+
+                if (DisplayOthersIconsLayout == null)
+                {
+                    DisplayOthersIconsLayout = new()
+                    {
+                        IsVisible   = true,
+                        ItemSpacing = 5,
+                        Size        = new(240, 24),
+                        Position    = new(145, -28),
+                    };
+
+                    for (var i = 0U; i < 8; i++)
+                    {
+                        var iconButtonNode = new IconButtonNode
+                        {
+                            IconId    = 62008 + i,
+                            Size      = new(24),
+                            IsVisible = true,
+                        };
+                        
+                        var iconNode = new IconImageNode
+                        {
+                            IconId    = 62008 + i,
+                            Size      = new(24),
+                            IsVisible = true,
+                        };
+
+                        iconNode.AddTimeline(new TimelineBuilder()
+                                             .AddFrameSetWithFrame(1,  10, 1,  position: Vector2.Zero, alpha: 255, multiplyColor: new(100.0f))
+                                             .AddFrameSetWithFrame(11, 17, 11, position: Vector2.Zero, alpha: 255, multiplyColor: new(100.0f))
+                                             .AddFrameSetWithFrame(18, 26, 18, position: Vector2.Zero + new Vector2(0.0f, 1.0f), alpha: 255,
+                                                                   multiplyColor: new(100.0f))
+                                             .AddFrameSetWithFrame(27, 36, 27, position: Vector2.Zero, alpha: 153, multiplyColor: new(80.0f))
+                                             .AddFrameSetWithFrame(37, 46, 37, position: Vector2.Zero, alpha: 255, multiplyColor: new(100.0f))
+                                             .AddFrameSetWithFrame(47, 53, 47, position: Vector2.Zero, alpha: 255, multiplyColor: new(100.0f))
+                                             .Build());
+                        
+                        iconButtonNode.BackgroundNode.IsVisible = false;
+                        iconButtonNode.ImageNode.IsVisible      = false;
+                        Service.AddonController.AttachNode(iconNode, iconButtonNode);
+                        
+                        DisplayOthersJobButtons.Add(iconButtonNode);
+                        DisplayOthersIconsLayout.AddNode(iconButtonNode);
+                    }
+                    
+                    Service.AddonController.AttachNode(DisplayOthersIconsLayout, InfosOm.RecipeNote->GetNodeById(57));
+                }
+
+                if (ClearSearchButton == null)
+                {
+                    ClearSearchButton = new()
+                    {
+                        IsVisible          = true,
+                        Position           = new(130, 25),
+                        Size               = new(28),
+                        TexturePath        = "ui/uld/WindowA_Button_hr1.tex",
+                        TextureCoordinates = Vector2.Zero,
+                        TextureSize        = new(28),
+                        OnClick = () =>
+                        {
+                            if (LastRecipeID == 0) return;
+
+                            var agent = AgentRecipeNote.Instance();
+                            if (!agent->RecipeSearchOpen) return;
+                            
+                            agent->OpenRecipeByRecipeId(LastRecipeID);
+                        }
+                    };
+                    
+                    Service.AddonController.AttachNode(ClearSearchButton, InfosOm.RecipeNote->GetNodeById(24));
+                }
+
+                if (GetShopInfoButtons.Count == 0)
+                {
+                    for (var i = 0U; i < 6; i++)
+                    {
+                        var componentNode = InfosOm.RecipeNote->GetComponentNodeById(89 + i);
+
+                        var index = i;
+                        var buttonNode = new IconButtonNode
+                        {
+                            IconId    = 60412,
+                            Size      = new(32),
+                            IsVisible = true,
+                            Position  = new(-26, 8f),
+                            OnClick = () =>
+                            {
+                                if (!IPCManager.IsIPCAvailable<RaphaelIPC>())
+                                {
+                                    PrintInstallRaphaelPluginMessage();
+                                    return;
+                                }
+
+                                var recipeID = RaphaelIPC.GetCurrentRecipeID();
+                                if (recipeID == 0                                        ||
+                                    !LuminaGetter.TryGetRow(recipeID, out Recipe recipe) ||
+                                    !recipe.Ingredient[(int)index].IsValid)
+                                    return;
+
+                                var item     = recipe.Ingredient[(int)index].Value;
+                                var itemInfo = ItemShopInfo.GetItemInfo(item.RowId);
+
+                                // 既能 NPC 买到又能市场布告板
+                                if (item.ItemSearchCategory.RowId > 0 && itemInfo != null)
+                                {
+                                    if (!IsConflictKeyPressed())
+                                        AddonShopsPreview.OpenWithData(itemInfo);
+                                    else
+                                        ChatHelper.SendMessage($"/pdr market {item.Name}");
+                                }
+                                else if (itemInfo != null)
+                                    AddonShopsPreview.OpenWithData(itemInfo);
+                                else if (item.ItemSearchCategory.RowId > 0)
+                                    ChatHelper.SendMessage($"/pdr market {item.Name}");
+                            }
+                        };
+                        
+                        var backgroundNode = (SimpleNineGridNode)buttonNode.BackgroundNode;
+
+                        backgroundNode.TexturePath        = "ui/uld/partyfinder_hr1.tex";
+                        backgroundNode.TextureCoordinates = new(38, 2);
+                        backgroundNode.TextureSize        = new(32, 34);
+                        backgroundNode.LeftOffset         = 0;
+                        backgroundNode.RightOffset        = 0;
+                        
+                        GetShopInfoButtons.Add(buttonNode);
+                        Service.AddonController.AttachNode(buttonNode, componentNode);
+                    }
+                }
+
+                if (LevelRecipeButton == null)
+                {
+                    LevelRecipeButton = new()
+                    {
+                        IsVisible = true,
+                        Position  = new(0, 32),
+                        Size      = new(58, 38),
+                        Tooltip = LuminaWrapper.GetAddonText(1710),
+                        OnClick = () =>
+                        {
+                            AgentRecipeNote.Instance()->SelectedRecipeCategoryPage = 2;
+                            var button = InfosOm.RecipeNote->GetComponentButtonById(35);
+                            if (button != null)
+                            {
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                            }
+                        }
+                    };
+                    LevelRecipeButton.BackgroundNode.IsVisible = false;
+                    
+                    Service.AddonController.AttachNode(LevelRecipeButton, InfosOm.RecipeNote->GetNodeById(32));
+                }
+                
+                if (SpecialRecipeButton == null)
+                {
+                    SpecialRecipeButton = new()
+                    {
+                        IsVisible = true,
+                        Position  = new(50, 32),
+                        Size      = new(58, 38),
+                        Tooltip   = LuminaWrapper.GetAddonText(1711),
+                        OnClick = () =>
+                        {
+                            AgentRecipeNote.Instance()->SelectedRecipeCategoryPage = 0;
+                            var button = InfosOm.RecipeNote->GetComponentButtonById(35);
+                            if (button != null)
+                            {
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                            }
+                        }
+                    };
+                    SpecialRecipeButton.BackgroundNode.IsVisible = false;
+                    
+                    Service.AddonController.AttachNode(SpecialRecipeButton, InfosOm.RecipeNote->GetNodeById(32));
+                }
+                
+                if (MasterRecipeButton == null)
+                {
+                    MasterRecipeButton = new()
+                    {
+                        IsVisible = true,
+                        Position  = new(102, 32),
+                        Size      = new(58, 38),
+                        Tooltip   = LuminaWrapper.GetAddonText(14212),
+                        OnClick = () =>
+                        {
+                            AgentRecipeNote.Instance()->SelectedRecipeCategoryPage = 1;
+                            var button = InfosOm.RecipeNote->GetComponentButtonById(35);
+                            if (button != null)
+                            {
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                                DService.Framework.Run(() => button->ClickAddonButton(InfosOm.RecipeNote));
+                            }
+                        }
+                    };
+                    MasterRecipeButton.BackgroundNode.IsVisible = false;
+                    
+                    Service.AddonController.AttachNode(MasterRecipeButton, InfosOm.RecipeNote->GetNodeById(32));
                 }
 
                 if (Throttler.Throttle("OptimizedRecipeNote-UpdateAddon", 1000))
@@ -264,31 +546,119 @@ public class OptimizedRecipeNote : DailyModuleBase
         
         NotificationSuccess($"{GetLoc("CopiedToClipboard")}");
     }
-    
-    private static unsafe AtkValue* AgentRecipeNoteReceiveEventDetour(
-        AgentInterface* agent,
-        AtkValue*       returnValues,
-        AtkValue*       values,
-        uint            valueCount,
-        ulong           eventKind)
-    {
-        var orig = AgentRecipeNoteReceiveEventHook.Original(agent, returnValues, values, valueCount, eventKind);
-        DService.Framework.RunOnTick(UpdateRecipeAddonButton, TimeSpan.FromMilliseconds(100));
-        return orig;
-    }
 
     private static unsafe void UpdateRecipeAddonButton()
     {
-        if (InfosOm.RecipeNote == null || RecipeCaculationButton == null) return;
-        
+        if (InfosOm.RecipeNote == null) return;
         if (!IPCManager.IsIPCAvailable<RaphaelIPC>()) return;
-                    
+        
+        ClearSearchButton.IsVisible = AgentRecipeNote.Instance()->RecipeSearchOpen && LastRecipeID != 0;
+        
         var recipeID = RaphaelIPC.GetCurrentRecipeID();
         if (recipeID == 0 || !LuminaGetter.TryGetRow(recipeID, out Recipe recipe))
         {
-            RecipeCaculationButton.IsVisible = false;
-            SwitchJobButton.IsVisible        = false;
+            RecipeCaculationButton.IsVisible   = false;
+            SwitchJobButton.IsVisible          = false;
+            DisplayOthersButton.IsVisible      = false;
+            DisplayOthersIconsLayout.IsVisible = false;
             return;
+        }
+
+        var maxIngredientAmount = 0;
+        for (var i = 0; i < recipe.Ingredient.Count; i++)
+        {
+            if (recipe.Ingredient[i] is not { IsValid:true, RowId: > 100 }) continue;
+            if (recipe.AmountIngredient[i] is var amount && amount > maxIngredientAmount)
+                maxIngredientAmount = amount;
+        }
+        
+        var appendOffset = maxIngredientAmount >= 10 ? 30 : 10;
+        
+        var resNode0 = InfosOm.RecipeNote->GetNodeById(95);
+        if (resNode0 != null)
+            resNode0->SetXFloat(46 + appendOffset);
+
+        var resNode1 = InfosOm.RecipeNote->GetNodeById(88);
+        if (resNode1 != null)
+            resNode1->SetXFloat(0 + appendOffset);
+                    
+        var resNode2 = InfosOm.RecipeNote->GetNodeById(84);
+        if (resNode2 != null)
+            resNode2->SetXFloat(0 + appendOffset);
+        
+        for (var d = 0; d < GetShopInfoButtons.Count; d++)
+        {
+            if (!recipe.Ingredient[d].IsValid) break;
+            
+            var item     = recipe.Ingredient[d].Value;
+            var itemInfo = ItemShopInfo.GetItemInfo(item.RowId);
+
+            var button     = GetShopInfoButtons[d];
+            var sourceText = string.Empty;
+
+            button.X = -6 + (maxIngredientAmount >= 10 ? -20 : 0);
+            
+            // 既能 NPC 买到又能市场布告板
+            if (item.ItemSearchCategory.RowId > 0 && itemInfo != null)
+            {
+                button.IconId = 60412;
+                sourceText    = $"{LuminaWrapper.GetAddonText(350)} / {LuminaWrapper.GetAddonText(548)} [{GetLoc("ConflictKey")}]";
+            }
+            else if (itemInfo != null)
+            {
+                button.IconId = 60412;
+                sourceText = $"{LuminaWrapper.GetAddonText(350)}";
+            }
+            else if (item.ItemSearchCategory.RowId > 0)
+            {
+                button.IconId = 60570;
+                sourceText = $"{LuminaWrapper.GetAddonText(548)}";
+            }
+            else
+                sourceText = string.Empty;
+            
+            if (sourceText == string.Empty)
+                button.IsVisible = false;
+            else
+            {
+                button.IsVisible = true;
+                button.Tooltip   = sourceText;
+            }
+        }
+
+        if (SameItemRecipes.TryGetValue(recipe.ItemResult.RowId, out var allRecipes))
+        {
+            DisplayOthersButton.IsVisible      = true;
+            DisplayOthersIconsLayout.IsVisible = true;
+            
+            var allCraftTypes = allRecipes.ToDictionary(x => x.CraftType.RowId, x => x.RowId);
+            for (var i = 0U; i < 8; i++)
+            {
+                var node = DisplayOthersJobButtons[(int)i];
+                if (allCraftTypes.TryGetValue(i, out var otherRecipeID))
+                {
+                    node.Alpha     = 1;
+                    node.IsEnabled = true;
+                    node.OnClick = () =>
+                    {
+                        var agent = AgentRecipeNote.Instance();
+                        if (RaphaelIPC.GetCurrentRecipeID() == otherRecipeID) return;
+                        
+                        agent->OpenRecipeByRecipeId(otherRecipeID);
+                    };
+                }
+                else
+                {
+                    node.Alpha     = 0.2f;
+                    node.IsEnabled = false;
+                    node.OnClick = () => { };
+                }
+            }
+        }
+        else
+        {
+            DisplayOthersButton.IsVisible      = false;
+            DisplayOthersIconsLayout.IsVisible = false;
         }
 
         if (recipe.CraftType.RowId != LocalPlayerState.ClassJob - 8)
@@ -339,6 +709,26 @@ public class OptimizedRecipeNote : DailyModuleBase
         Chat(builder.Build());
     }
 
+    private static void PrintInstallRaphaelPluginMessage()
+    {
+        InstallRaphaelLinkPayload ??= LinkPayloadManager.Register(OnClickInstallRaphaelPayload, out _);
+                            
+        var message = new SeStringBuilder().AddIcon(BitmapFontIcon.Warning)
+                                           .AddText($" {GetLoc("OptimizedRecipeNote-Message-InstallRapheal")}")
+                                           .Add(NewLinePayload.Payload)
+                                           .AddText($"{GetLoc("Operation")}: ")
+                                           .Add(RawPayload.LinkTerminator)
+                                           .Add(InstallRaphaelLinkPayload)
+                                           .AddText("[")
+                                           .AddUiForeground(35)
+                                           .AddText($"{GetLoc("Enable")} / {GetLoc("Install")}")
+                                           .AddUiForegroundOff()
+                                           .AddText("]")
+                                           .Add(RawPayload.LinkTerminator)
+                                           .Build();
+        Chat(message);
+    }
+
     private class AddonActionsPreview(TaskHelper taskHelper, CaculationResult result) : NativeAddon
     {
         public static AddonActionsPreview? Addon  { get; set; }
@@ -367,7 +757,7 @@ public class OptimizedRecipeNote : DailyModuleBase
                 var rowCount = MathF.Ceiling(result.Actions.Count / 10f);
                 Addon ??= new(taskHelper, result)
                 {
-                    InternalName          = "DRAutoCaculateRecipe",
+                    InternalName          = "DRRecipeNoteActionsPreview",
                     Title                 = $"{GetLoc("OptimizedRecipeNote-AddonTitle")}",
                     Subtitle              = $"{GetLoc("OptimizedRecipeNote-Message-StepsInfo", result.Actions.Count, result.Actions.Count * 3)}",
                     Size                  = new(500f, 160f + (50f * (rowCount - 1))),
@@ -611,6 +1001,210 @@ public class OptimizedRecipeNote : DailyModuleBase
             
             if (ExecuteButton != null && TaskHelper.TryGetTarget(out var taskHelper)) 
                 ExecuteButton.IsEnabled = Synthesis != null && !taskHelper.IsBusy;
+        }
+    }
+
+    private class AddonShopsPreview : NativeAddon
+    {
+        public static AddonShopsPreview? Addon  { get; set; }
+        
+        private static Task? OpenAddonTask;
+        
+        public static void OpenWithData(ItemShopInfo shopInfo)
+        {
+            if (shopInfo is not { NPCInfos.Count: > 0 }) return;
+            if (OpenAddonTask != null) return;
+            
+            var isAddonExisted = Addon?.IsOpen ?? false;
+            if (Addon != null)
+            {
+                Addon.Dispose();
+                Addon = null;
+            }
+
+            OpenAddonTask = DService.Framework.RunOnTick(() =>
+            {
+                Addon ??= new(shopInfo)
+                {
+                    InternalName          = "DRRecipeNoteShopsPreview",
+                    Title                 = GetLoc("OptimizedRecipeNote-ShopList"),
+                    Size                  = new(550f, 400f),
+                    Position              = new(800f, 350f),
+                    NativeController      = Service.AddonController,
+                    RememberClosePosition = true,
+                };
+                Addon.Open();
+            }, TimeSpan.FromMilliseconds(isAddonExisted ? 500 : 0)).ContinueWith(_ => OpenAddonTask = null);
+        }
+        
+        public ItemShopInfo ShopInfo { get; set; }
+        
+        private AddonShopsPreview(ItemShopInfo shopInfo) => 
+            ShopInfo = shopInfo;
+        
+        protected override unsafe void OnSetup(AtkUnitBase* addon)
+        {
+            var itemInfoRow = new HorizontalListNode
+            {
+                IsVisible   = true,
+                Size        = new Vector2(ContentSize.X - 5, 48),
+                Position    = ContentStartPosition + new Vector2(5, 0),
+                ItemSpacing = 5
+            };
+            AttachNode(itemInfoRow);
+
+            var itemIconNode = new IconImageNode
+            {
+                IsVisible = true,
+                Size      = new(36),
+                IconId    = LuminaWrapper.GetItemIconID(ShopInfo.ItemID)
+            };
+            itemInfoRow.AddNode(itemIconNode);
+
+            var itemNameNode = new TextNode
+            {
+                IsVisible = true,
+                TextFlags = TextFlags.AutoAdjustNodeSize,
+                Text      = LuminaWrapper.GetItemName(ShopInfo.ItemID),
+                FontSize  = 18,
+                Position  = new(0, 6)
+            };
+            itemInfoRow.AddNode(itemNameNode);
+
+            if (ShopInfo.GetItem().ItemSearchCategory.RowId > 0)
+            {
+                var marketButtonNode = new IconButtonNode
+                {
+                    IconId   = 60570,
+                    Tooltip  = LuminaWrapper.GetAddonText(548),
+                    Size     = new(32),
+                    Position = itemInfoRow.Position + new Vector2(itemNameNode.GetTextDrawSize(itemNameNode.Text).X + itemIconNode.Size.X + 15f, 2),
+                    IsVisible = true,
+                    OnClick = () => ChatHelper.SendMessage($"/pdr market {ShopInfo.GetItem().Name}")
+                };
+                AttachNode(marketButtonNode);
+            }
+
+            var scrollingAreaNode = new ScrollingAreaNode<VerticalListNode>
+            {
+                Position      = ContentStartPosition + new Vector2(5, 48),
+                Size          = ContentSize          - new Vector2(5, 48),
+                ContentHeight = ShopInfo.NPCInfos.Count(x => x.Location != null) * 33,
+                ScrollSpeed   = 100,
+                IsVisible     = true,
+            };
+            AttachNode(scrollingAreaNode);
+
+            var contentNode = scrollingAreaNode.ContentNode;
+            contentNode.ItemSpacing = 3;
+            
+            contentNode.AddDummy(5);
+
+            var testTextNode = new TextNode();
+
+            var longestLocationText = ShopInfo.NPCInfos
+                                              .Where(x => x.Location != null)
+                                              .Select(x => x.Location.GetTerritory().ExtractPlaceName())
+                                              .MaxBy(x => x.Length);
+            var locationColumnWidth = testTextNode.GetTextDrawSize(longestLocationText).X + 40f;
+            
+            var longestNameText = ShopInfo.NPCInfos
+                                          .Select(x => x.Name)
+                                          .MaxBy(x => x.Length);
+            var nameColumnWidth = testTextNode.GetTextDrawSize(longestNameText).X + 5f;
+            
+            foreach (var npcInfo in ShopInfo.NPCInfos.OrderBy(x => x.Location?.TerritoryID == 282))
+            {
+                if (npcInfo.Location == null)
+                    continue;
+                
+                var row = new ResNode
+                {
+                    IsVisible   = true,
+                    Size        = new(contentNode.Width, 30),
+                };
+                contentNode.AddNode(row);
+
+                var npcNameNode = new TextNode
+                {
+                    IsVisible = true,
+                    Text     = npcInfo.Name,
+                    Position = new(0, 4)
+                };
+                Service.AddonController.AttachNode(npcNameNode, row);
+
+                var locationName = npcInfo.Location.TerritoryID == 282 ? LuminaWrapper.GetAddonText(8495) : npcInfo.Location.GetTerritory().ExtractPlaceName();
+                var npcLocationNode = new TextButtonNode
+                {
+                    IsVisible = true,
+                    Label     = locationName,
+                    Size      = new(locationColumnWidth, 28f),
+                    Position  = new(nameColumnWidth, 0),
+                    IsEnabled = npcInfo.Location.TerritoryID != 282,
+                    Tooltip   = $"{GetLoc("Mark")} / {LuminaWrapper.GetAddonText(168)} [{GetLoc("ConflictKey")}]",
+                    OnClick = () =>
+                    {
+                        var pos = MapToWorld(new(npcInfo.Location.MapPosition.X, npcInfo.Location.MapPosition.Y), npcInfo.Location.GetMap()).ToVector3(0);
+
+                        var instance = AgentMap.Instance();
+                        instance->SetFlagMapMarker(npcInfo.Location.TerritoryID, npcInfo.Location.MapID, pos);
+
+                        if (!IsConflictKeyPressed())
+                            instance->OpenMap(npcInfo.Location.MapID, npcInfo.Location.TerritoryID, npcInfo.Name);
+                        else
+                        {
+                            var aetheryte = MovementManager.GetNearestAetheryte(pos, npcInfo.Location.TerritoryID);
+                            if (aetheryte != null)
+                                ChatHelper.SendMessage($"/pdrtelepo {aetheryte.Name}");
+                        }
+                    }
+                };
+                Service.AddonController.AttachNode(npcLocationNode, row);
+
+                var costInfoComponent = new HorizontalListNode
+                {
+                    IsVisible   = true,
+                    Position    = new(nameColumnWidth + locationColumnWidth + 10f, 4),
+                    Size        = new(100, 28),
+                    ItemSpacing = 5
+                };
+
+                foreach (var costInfo in npcInfo.CostInfos)
+                {
+                    var costIconNode = new IconImageNode
+                    {
+                        IsVisible = true,
+                        Size      = new(28),
+                        IconId    = LuminaWrapper.GetItemIconID(costInfo.ItemID),
+                        Position  = new(0, -6),
+                        Tooltip = $"{LuminaWrapper.GetItemName(costInfo.ItemID)}"
+                    };
+                    costIconNode.SetEventFlags();
+                    costInfoComponent.AddNode(costIconNode);
+
+                    var costNode = new TextNode
+                    {
+                        IsVisible = true,
+                        TextFlags = TextFlags.AutoAdjustNodeSize,
+                        Text      = costInfo.ToString().Replace(LuminaWrapper.GetItemName(costInfo.ItemID), string.Empty).Trim(),
+                        Position  = new(0, 0)
+                    };
+                    costInfoComponent.AddNode(costNode);
+                }
+                
+                Service.AddonController.AttachNode(costInfoComponent, row);
+            }
+        }
+
+        protected override unsafe void OnUpdate(AtkUnitBase* addon)
+        {
+            if (DService.KeyState[VirtualKey.ESCAPE])
+            {
+                Close();
+                
+                if (SystemMenu != null)
+                    SystemMenu->Close(true);
+            }
         }
     }
 

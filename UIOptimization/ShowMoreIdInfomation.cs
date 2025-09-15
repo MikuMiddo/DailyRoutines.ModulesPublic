@@ -1,79 +1,56 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using DailyRoutines.Abstracts;
+using DailyRoutines.Managers;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.Gui.Dtr;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Hooking;
-using Dalamud.Memory;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using InteropGenerator.Runtime;
 using Lumina.Excel.Sheets;
-using ActionKind = FFXIVClientStructs.FFXIV.Client.UI.Agent.ActionKind;
 using RowStatus = Lumina.Excel.Sheets.Status;
 
 namespace DailyRoutines.ModulesPublic;
 
-public unsafe class ShowMoreIdInfomation : DailyModuleBase
+public unsafe class ShowMoreIDInfomation : DailyModuleBase
 {
     public override ModuleInfo Info { get; } = new()
     {
-        Title = GetLoc("ShowMoreIdInfomationTitle"),
-        Description = GetLoc("ShowMoreIdInfomationDescription"),
+        Title = GetLoc("ShowMoreIDInfomationTitle"),
+        Description = GetLoc("ShowMoreIDInfomationDescription"),
         Category = ModuleCategories.UIOptimization,
         Author = ["Middo"]
     };
 
-    private static readonly CompSig GenerateItemTooltipSig = new("48 89 5C 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 83 EC ?? 48 8B 42 ?? 4C 8B EA");
-    private delegate void* GenerateItemTooltipDelegate(AtkUnitBase* addonItemDetail, NumberArrayData* numberArrayData, StringArrayData* stringArrayData);
-    private static Hook<GenerateItemTooltipDelegate>? GenerateItemTooltipHook;
-
-    private static readonly CompSig ActionTooltipSig = new("48 89 5C 24 ?? 55 56 57 41 56 41 57 48 83 EC ?? 48 8B 9A");
-    private delegate nint ActionTooltipDelegate(AtkUnitBase* a1, void* a2, ulong a3);
-    private static Hook<ActionTooltipDelegate>? ActionTooltipHook;
-
-    private static readonly CompSig ActionHoveredSig = new("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 41 54 41 55 41 56 41 57 48 83 EC ?? 45 8B F1 41 8B D8");
-    private delegate void ActionHoveredDelegate(AgentActionDetail* agent,ActionKind actionKind, uint actionId, int flag, byte isLovmActionDetail);
-    private static Hook<ActionHoveredDelegate>? ActionHoveredHook;
-
-    private static readonly CompSig TooltipShowSig = new("66 44 89 44 24 ?? 55 53 41 54");
-    private delegate void TooltipShowDelegate(AtkTooltipManager* atkTooltipManager, AtkTooltipManager.AtkTooltipType type, ushort parentId, AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* tooltipArgs, long unkDelegate, byte unk7, byte unk8);
-    private static Hook<TooltipShowDelegate>? TooltipShowHook;
-
     private static Config ModuleConfig = null!;
 
-    private static uint HoveredActionid = 0;
+    private static IDtrBarEntry? MapIDEntry;
 
-    private static IDtrBarEntry? MapIdEntry;
+    private static Guid ItemTooltipModityGuid = Guid.Empty;
+    private static Guid ActionTooltipModityGuid = Guid.Empty;
+    private static Guid StatuTooltipModityGuid = Guid.Empty;
+    private static Guid WeatherTooltipMidifyGuid = Guid.Empty;
 
-    protected override void Init() 
+    protected override void Init()
     {
         ModuleConfig = LoadConfig<Config>() ?? new();
+        MapIDEntry ??= DService.DtrBar.Get("ShowMoreIDInfomation-MapID");
 
-        MapIdEntry ??= DService.DtrBar.Get("ShowMoreIdInfomation-MapId");
-        
-        GenerateItemTooltipHook ??= GenerateItemTooltipSig.GetHook<GenerateItemTooltipDelegate>(OnGenerateItemTooltipDetour);
-        GenerateItemTooltipHook.Enable();
+        GameTooltipManager.RegGenerateItemTooltipModifier(ModifyItemTooltip);
+        GameTooltipManager.RegGenerateActionTooltipModifier(ModifyActionTooltip);
+        GameTooltipManager.RegTooltipShowModifier(ModifyStatuTooltip);
+        GameTooltipManager.RegTooltipShowModifier(ModifyWeatherTooltip);
 
-        ActionTooltipHook ??= ActionTooltipSig.GetHook<ActionTooltipDelegate>(OnActionTooltipDetour);
-        ActionTooltipHook.Enable();
-
-        ActionHoveredHook ??= ActionHoveredSig.GetHook<ActionHoveredDelegate>(OnActionHoveredDetour);
-        ActionHoveredHook.Enable();
-
-        TooltipShowHook ??= TooltipShowSig.GetHook<TooltipShowDelegate>(OnTooltipShowDetour);
-        TooltipShowHook.Enable();
-
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh,       "ActionDetail", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh,         "ItemDetail", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,          "ActionDetail", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,            "ItemDetail", OnAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw, "_TargetInfoMainTarget", OnAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,              "_NaviMap", OnAddon);
     }
@@ -82,17 +59,17 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
     {
         using (ImRaii.Group())
         {
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowItemId"), ref ModuleConfig.ShowItemId))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowItemID"), ref ModuleConfig.ShowItemID))
                 SaveConfig(ModuleConfig);
             ImGui.SameLine();
-            if (ModuleConfig.ShowItemId)
+            if (ModuleConfig.ShowItemID)
             {
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ItemIdUseHexId"), ref ModuleConfig.ItemIdUseHexId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ItemIDUseHexID"), ref ModuleConfig.ItemIDUseHexID))
                     SaveConfig(ModuleConfig);
-                if (ModuleConfig.ItemIdUseHexId)
+                if (ModuleConfig.ItemIDUseHexID)
                 {
                     ImGui.SameLine();
-                    if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ItemIdUseBothHexAndDecimal"), ref ModuleConfig.ItemIdUseBothHexAndDecimal))
+                    if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ItemIDUseBothHexAndDecimal"), ref ModuleConfig.ItemIDUseBothHexAndDecimal))
                         SaveConfig(ModuleConfig);
                 }
             }
@@ -100,34 +77,35 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
         using (ImRaii.Group())
         {
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowActionId"), ref ModuleConfig.ShowActionId))
+            var prevAction = ModuleConfig.ShowActionID;
+            if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowActionID"), ref ModuleConfig.ShowActionID))
                 SaveConfig(ModuleConfig);
-            if (ModuleConfig.ShowActionId)
+            if (ModuleConfig.ShowActionID)
             {
                 ImGui.SameLine();
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ActionIdUseHex"), ref ModuleConfig.ActionIdUseHex))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ActionIDUseHex"), ref ModuleConfig.ActionIDUseHex))
                     SaveConfig(ModuleConfig);
                 ImGui.SameLine();
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowResolvedActionId"), ref ModuleConfig.ShowResolvedActionId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowResolvedActionID"), ref ModuleConfig.ShowResolvedActionID))
                     SaveConfig(ModuleConfig);               
             }
 
             ImRaii.PushIndent(2);
-            if (ModuleConfig.ActionIdUseHex)
+            if (ModuleConfig.ActionIDUseHex && ModuleConfig.ShowActionID)
             {
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ActionIdUseBothHexAndDecimal"), ref ModuleConfig.ActionIdUseBothHexAndDecimal))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ActionIDUseBothHexAndDecimal"), ref ModuleConfig.ActionIDUseBothHexAndDecimal))
                 {
-                    ModuleConfig.ShowOriginalActionId = false;
+                    ModuleConfig.ShowOriginalActionID = false;
                     SaveConfig(ModuleConfig);
                 }
             }
-            if (ModuleConfig.ShowResolvedActionId && ModuleConfig.ActionIdUseHex) 
+            if (ModuleConfig.ShowResolvedActionID && ModuleConfig.ActionIDUseHex) 
                 ImGui.SameLine();             
-            if (ModuleConfig.ShowResolvedActionId)
+            if (ModuleConfig.ShowResolvedActionID && ModuleConfig.ShowActionID)
             {
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowOriginalActionId"), ref ModuleConfig.ShowOriginalActionId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowOriginalActionID"), ref ModuleConfig.ShowOriginalActionID))
                 {
-                    ModuleConfig.ActionIdUseBothHexAndDecimal = false;
+                    ModuleConfig.ActionIDUseBothHexAndDecimal = false;
                     SaveConfig(ModuleConfig);
                 }  
             }
@@ -135,38 +113,38 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
 
         using (ImRaii.Group())
         {
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowTargetId"), ref ModuleConfig.ShowTargetId))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowTargetID"), ref ModuleConfig.ShowTargetID))
                 SaveConfig(ModuleConfig);
             ImGui.SameLine();
-            if (ModuleConfig.ShowTargetId)
+            if (ModuleConfig.ShowTargetID)
             {
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowBattleNpcTargetId"), ref ModuleConfig.ShowBattleNpcTargetId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowBattleNpcTargetID"), ref ModuleConfig.ShowBattleNpcTargetID))
                     SaveConfig(ModuleConfig);
                 ImGui.SameLine();
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowEventNpcTargetId"), ref ModuleConfig.ShowEventNpcTargetId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowEventNpcTargetID"), ref ModuleConfig.ShowEventNpcTargetID))
                     SaveConfig(ModuleConfig);
                 ImGui.SameLine();
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowCompanionTargetId"), ref ModuleConfig.ShowCompanionTargetId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowCompanionTargetID"), ref ModuleConfig.ShowCompanionTargetID))
                     SaveConfig(ModuleConfig);
                 ImGui.SameLine();
-                if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowOthersTargetId"), ref ModuleConfig.ShowOthersTargetId))
+                if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowOthersTargetID"), ref ModuleConfig.ShowOthersTargetID))
                     SaveConfig(ModuleConfig);
             }
         }
 
         using (ImRaii.Group())
         {
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowBuffId"), ref ModuleConfig.ShowBuffId))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowBuffID"), ref ModuleConfig.ShowStatuID))
                 SaveConfig(ModuleConfig);
             ImGui.SameLine();
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowWeatherId"), ref ModuleConfig.ShowWeatherId))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowWeatherID"), ref ModuleConfig.ShowWeatherID))
                 SaveConfig(ModuleConfig);
             ImGui.SameLine();
-            if (ImGui.Checkbox(GetLoc("ShowMoreIdInfomation-ShowMapId"), ref ModuleConfig.ShowMapId))
+            if (ImGui.Checkbox(GetLoc("ShowMoreIDInfomation-ShowMapID"), ref ModuleConfig.ShowMapID))
                 SaveConfig(ModuleConfig);
         }
     }
-    
+
     private void OnAddon(AddonEvent type, AddonArgs args)
     {
         switch (args.AddonName)
@@ -174,15 +152,15 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
             case "ActionDetail":
                 if (ActionDetail== null) return;
 
-                var actionTextNode = ActionDetail->GetTextNodeById(35);
+                var actionTextNode = ActionDetail->GetTextNodeById(6);
                 if (actionTextNode == null) return;
-
+                
                 actionTextNode->TextFlags |= (byte)TextFlags.MultiLine;
                 break;
             case "ItemDetail":
                 if (ItemDetail== null) return;
 
-                var itemTextnode = ItemDetail->GetTextNodeById(6);
+                var itemTextnode = ItemDetail->GetTextNodeById(35);
                 if (itemTextnode == null) return;
 
                 itemTextnode->TextFlags |= (byte)TextFlags.MultiLine;
@@ -192,135 +170,127 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
                 
                 var targetNameNode = TargetInfoMainTarget->GetNodeById(10)->GetAsAtkTextNode();
                 var target = DService.Targets.Target;
-                if (targetNameNode == null || target == null)  return;
+                if (targetNameNode == null || target == null) return;
 
-                var targetid = target.DataId;
-                if (!ModuleConfig.ShowTargetId || targetid == 0) return;
-
+                var id = target.DataId;
+                var name = targetNameNode->NodeText.ExtractText();
                 var show = target.ObjectKind switch
                 {
-                    ObjectKind.BattleNpc   => ModuleConfig.ShowBattleNpcTargetId,
-                    ObjectKind.EventNpc    => ModuleConfig.ShowEventNpcTargetId,
-                    ObjectKind.Companion   => ModuleConfig.ShowCompanionTargetId,
-                    _                      => ModuleConfig.ShowOthersTargetId,
+                    ObjectKind.BattleNpc => ModuleConfig.ShowBattleNpcTargetID,
+                    ObjectKind.EventNpc => ModuleConfig.ShowEventNpcTargetID,
+                    ObjectKind.Companion => ModuleConfig.ShowCompanionTargetID,
+                    _ => ModuleConfig.ShowOthersTargetID,
                 };
-                if (!show) return;
+                
+                if (!show || !ModuleConfig.ShowTargetID)
+                {
+                    targetNameNode->NodeText.SetString(name.Replace($"  [{id}]",""));
+                    return;
+                }
 
-                var name = targetNameNode->NodeText.ExtractText();
-                if (name != null && !name.Contains($"[{targetid}]")) 
-                    targetNameNode->NodeText.SetString($"{name}  [{targetid}]");
-
+                if (!name.Contains($"[{id}]"))
+                    targetNameNode->NodeText.SetString($"{name}  [{id}]");
                 break;
             case "_NaviMap":
-                MapIdEntry.Shown = ModuleConfig.ShowMapId;
-
-                var mapId = DService.ClientState.MapId;
-                if (mapId == 0) return;
-
-                MapIdEntry.Text = $"{GetLoc("ShowMoreIdInfomation-CurrentMapIdIs")}{mapId}";
+                MapIDEntry.Shown = ModuleConfig.ShowMapID;
+                var mapID = DService.ClientState.MapId;
+                if (mapID != 0)
+                    MapIDEntry.Text = $"{GetLoc("ShowMoreIDInfomation-CurrentMapIDIs")}{mapID}";
                 break;
         }
     }
 
-    public void OnTooltipShowDetour(AtkTooltipManager* atkTooltipManager, AtkTooltipManager.AtkTooltipType type, ushort parentId, AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* tooltipArgs, long unkDelegate, byte unk7, byte unk8)
+    private void ModifyItemTooltip(AtkUnitBase* addonItemDetail, NumberArrayData* numberArrayData, StringArrayData* stringArrayData)
     {
-        if (ModuleConfig.ShowBuffId) 
-            TooltipBuffIdAdd(targetNode, tooltipArgs);
-        if (ModuleConfig.ShowWeatherId)
-            TooltipWeatherAdd(parentId, targetNode, tooltipArgs);
+        if (ItemTooltipModityGuid != Guid.Empty)
+        {
+            GameTooltipManager.RemoveItemDetailTooltipModify(ItemTooltipModityGuid);
+            ItemTooltipModityGuid = Guid.Empty;
+        }
 
-        TooltipShowHook?.Original(atkTooltipManager, type, parentId, targetNode, tooltipArgs, unkDelegate, unk7, unk8);
+        if (!ModuleConfig.ShowItemID) return;
+
+        var itemID = AgentItemDetail.Instance()->ItemId;
+        if (itemID < 2000000)
+            itemID %= 500000;
+
+        var payloads = new List<Payload>()
+        {
+            new UIForegroundPayload(3),
+            new TextPayload("   [")
+        };
+
+        if (!ModuleConfig.ItemIDUseHexID || ModuleConfig.ItemIDUseBothHexAndDecimal)
+            payloads.Add(new TextPayload($"{itemID}"));
+
+        if (ModuleConfig.ItemIDUseHexID)
+        {
+            if (ModuleConfig.ItemIDUseBothHexAndDecimal)
+                payloads.Add(new TextPayload(" - "));
+            payloads.Add(new TextPayload($"0x{itemID:X}"));
+        }
+
+        payloads.Add(new TextPayload("]"));
+        payloads.Add(new UIForegroundPayload(0));
+
+        ItemTooltipModityGuid = GameTooltipManager.AddItemDetailTooltipModify(itemID, TooltipItemType.ItemUiCategory, new SeString(payloads), TooltipModifyMode.Append);
     }
 
-    public void* OnGenerateItemTooltipDetour(AtkUnitBase* addonItemDetail, NumberArrayData* numberArrayData, StringArrayData* stringArrayData) 
+    private void ModifyActionTooltip(AtkUnitBase* addonActionDetail, NumberArrayData* numberArrayData, StringArrayData* stringArrayData)
     {
-        if (!ModuleConfig.ShowItemId) return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData); 
-
-        var seStr = MemoryHelper.ReadSeStringNullTerminated((nint)stringArrayData->StringArray[2]); // 此处与下方set函数中的 2 均为ItemUiCategory在tooltip中的索引
-        if (seStr == null) return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData);
-        if (seStr.TextValue.EndsWith(']')) return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData);
-
-        var id = AgentItemDetail.Instance()->ItemId;
-        if (id < 2000000) 
-            id %= 500000;
-
-        seStr.Payloads.Add(new UIForegroundPayload(3));
-        seStr.Payloads.Add(new TextPayload("   ["));
-        if (ModuleConfig.ItemIdUseHexId == false || ModuleConfig.ItemIdUseBothHexAndDecimal) 
-            seStr.Payloads.Add(new TextPayload($"{id}"));
-
-        if (ModuleConfig.ItemIdUseHexId) 
+        if (ActionTooltipModityGuid != Guid.Empty)
         {
-            if (ModuleConfig.ItemIdUseBothHexAndDecimal) 
-                seStr.Payloads.Add(new TextPayload(" - "));
-            seStr.Payloads.Add(new TextPayload($"0x{id:X}"));
+            GameTooltipManager.RemoveItemDetailTooltipModify(ActionTooltipModityGuid);
+            ActionTooltipModityGuid = Guid.Empty;
         }
 
-        seStr.Payloads.Add(new TextPayload("]"));
-        seStr.Payloads.Add(new UIForegroundPayload(0));
+        if (!ModuleConfig.ShowActionID) return;
 
-        stringArrayData->SetValue(2, seStr.EncodeWithNullTerminator(), false);
+        var hoveredID = AgentActionDetail.Instance()->ActionId;
+        var id = ModuleConfig is { ShowResolvedActionID: true, ShowOriginalActionID: false } 
+               ? hoveredID 
+               : AgentActionDetail.Instance()->OriginalId;
 
-        return GenerateItemTooltipHook.Original(addonItemDetail, numberArrayData, stringArrayData);
+        var payloads = new List<Payload>();
+        var needNewLine = ModuleConfig is { ShowResolvedActionID: true, ShowOriginalActionID: true, ActionIDUseBothHexAndDecimal: false } && id != hoveredID;
+
+        payloads.Add(needNewLine ? new NewLinePayload() : new TextPayload("   "));
+        payloads.Add(new UIForegroundPayload(3));
+        payloads.Add(new TextPayload("["));
+
+        if (ModuleConfig is { ActionIDUseHex: false } or { ActionIDUseBothHexAndDecimal: true })
+            payloads.Add(new TextPayload($"{id}"));
+
+        if (ModuleConfig.ActionIDUseHex)
+        {
+            if (ModuleConfig.ActionIDUseBothHexAndDecimal)
+                payloads.Add(new TextPayload(" - "));
+            payloads.Add(new TextPayload($"0x{id:X}"));
+        }
+
+        if (ModuleConfig is { ShowResolvedActionID: true, ShowOriginalActionID: true, ActionIDUseBothHexAndDecimal: false } && id != hoveredID)
+        {
+            var arrowText = ModuleConfig.ActionIDUseHex 
+                          ? $" → 0x{hoveredID:X}" 
+                          : $" → {hoveredID}";
+            payloads.Add(new TextPayload(arrowText));
+        }
+
+        payloads.Add(new TextPayload("]"));
+        payloads.Add(new UIForegroundPayload(0));
+
+        ActionTooltipModityGuid = GameTooltipManager.AddActionDetailTooltipModify(hoveredID, TooltipActionType.ActionKind, new SeString(payloads), TooltipModifyMode.Append);
     }
 
-    private void OnActionHoveredDetour(AgentActionDetail* agent, ActionKind actionKind, uint actionId, int flag, byte IsLovmActionDetail) 
+    private void ModifyStatuTooltip(AtkTooltipManager* manager, AtkTooltipManager.AtkTooltipType type, ushort parentID, AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* args)
     {
-        HoveredActionid = actionId;
-
-        ActionHoveredHook?.Original(agent, actionKind, actionId, flag, IsLovmActionDetail);
-    }
-
-    private nint OnActionTooltipDetour(AtkUnitBase* addon, void* a2, ulong a3) 
-    {
-        if(!ModuleConfig.ShowActionId) return ActionTooltipHook.Original(addon, a2, a3);
-
-        var categoryText = addon->GetTextNodeById(6);
-        if (categoryText == null) return ActionTooltipHook.Original(addon, a2, a3);
-
-        var seStr = MemoryHelper.ReadSeStringNullTerminated((nint)categoryText->NodeText.StringPtr.Value);
-        if (seStr.Payloads.Count > 1) return ActionTooltipHook.Original(addon, a2, a3);
-
-        var id = ModuleConfig.ShowResolvedActionId ? ActionManager.Instance()->GetAdjustedActionId(HoveredActionid) : HoveredActionid;
-        if (seStr.Payloads.Count >= 1) 
-            {
-            if (ModuleConfig is { ShowResolvedActionId:true, ShowOriginalActionId:true, ActionIdUseBothHexAndDecimal:false} && id != HoveredActionid)
-                seStr.Payloads.Add(new NewLinePayload());
-            else
-                seStr.Payloads.Add(new TextPayload("   "));
-        }
-
-        seStr.Payloads.Add(new UIForegroundPayload(3));
-        seStr.Payloads.Add(new TextPayload("["));
-
-        if (ModuleConfig is { ShowResolvedActionId: true, ShowOriginalActionId: true, ActionIdUseBothHexAndDecimal: false } && id != HoveredActionid)
+        if (StatuTooltipModityGuid != Guid.Empty)
         {
-            if(ModuleConfig.ActionIdUseHex)
-                seStr.Payloads.Add(new TextPayload($"0x{HoveredActionid:X}→"));
-            else
-                seStr.Payloads.Add(new TextPayload($"{HoveredActionid}→"));
+            GameTooltipManager.RemoveItemDetailTooltipModify(StatuTooltipModityGuid);
+            StatuTooltipModityGuid = Guid.Empty;
         }
 
-        if (!ModuleConfig.ActionIdUseHex || ModuleConfig.ActionIdUseBothHexAndDecimal)
-                seStr.Payloads.Add(new TextPayload($"{id}"));
-
-        if (ModuleConfig.ActionIdUseHex) 
-        {
-            if (ModuleConfig.ActionIdUseBothHexAndDecimal) 
-                seStr.Payloads.Add(new TextPayload(" - "));
-            seStr.Payloads.Add(new TextPayload($"0x{id:X}"));
-        }
-
-        seStr.Payloads.Add(new TextPayload("]"));
-        seStr.Payloads.Add(new UIForegroundPayload(0));
-        categoryText->SetText(seStr.EncodeWithNullTerminator());
-
-        return ActionTooltipHook.Original(addon, a2, a3);
-    }    
-    
-    private void TooltipBuffIdAdd(AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* tooltipArgs)
-    {
-        Dictionary<uint, uint> IconStatusIDMap = [];
+        if (!ModuleConfig.ShowStatuID) return;
 
         var localPlayer = DService.ObjectTable.LocalPlayer;
         if (localPlayer == null || targetNode == null) return;
@@ -328,119 +298,101 @@ public unsafe class ShowMoreIdInfomation : DailyModuleBase
         var imageNode = targetNode->GetAsAtkImageNode();
         if (imageNode == null) return;
 
-        var iconId = imageNode->PartsList->Parts[imageNode->PartId].UldAsset->AtkTexture.Resource->IconId;
-        if (iconId < 210000 || iconId > 230000) return;
+        var iconID = imageNode->PartsList->Parts[imageNode->PartId].UldAsset->AtkTexture.Resource->IconId;
+        if (iconID < 210000 || iconID > 230000) return;
 
-        var rawStr = (string)tooltipArgs->Text;
-        if (rawStr == null) return;
+        var map = new Dictionary<uint, uint>();
+        void AddStatuses(StatusManager sm) => AddStatusesToMap(sm, ref map);
 
-        var currentTarget = DService.Targets.Target;
-        if (currentTarget != null && currentTarget != localPlayer)
-            AddStatusesToMap(currentTarget.ToBCStruct()->StatusManager, ref IconStatusIDMap);
+        if (DService.Targets.Target is { } target && target.Address != localPlayer.Address)
+            AddStatuses(target.ToBCStruct()->StatusManager);
 
-        var focusTarget = DService.Targets.FocusTarget;
-        if (focusTarget != null)
-            AddStatusesToMap(focusTarget.ToBCStruct()->StatusManager, ref IconStatusIDMap);
+        if (DService.Targets.FocusTarget is { } focus)
+            AddStatuses(focus.ToBCStruct()->StatusManager);
 
-        var partyList = AgentHUD.Instance()->PartyMembers;
-        foreach (var member in partyList.ToArray().Where(m => m.Index != 0))
+        foreach (var member in AgentHUD.Instance()->PartyMembers.ToArray().Where(m => m.Index != 0))
         {
             if (member.Object != null)
-                AddStatusesToMap(member.Object->StatusManager, ref IconStatusIDMap);
+                AddStatuses(member.Object->StatusManager);
         }
+        AddStatuses(localPlayer.ToBCStruct()->StatusManager);
 
-        AddStatusesToMap(localPlayer.ToBCStruct()->StatusManager, ref IconStatusIDMap);
+        if (!map.TryGetValue(iconID, out var statuID) || statuID == 0) return;
 
-        if (!IconStatusIDMap.TryGetValue(iconId, out var statuId)) return;
-
-        if (rawStr.Contains($"[{statuId}]") || statuId == 0) return;
-
-        SeString RegexedStr = Regex.Replace(rawStr, @"^(.*?)(?=\(|（|\n|$)", "$1" + $"  [{statuId}]"); // 正则表达式含义为匹配第一个左括号或换行符
-
-        SetTooltipCStringPointer(ref tooltipArgs->Text, RegexedStr);
+        StatuTooltipModityGuid = GameTooltipManager.AddstatuTooltipModify(statuID, $"  [{statuID}]", TooltipModifyMode.Regex, @"^(.*?)(?=\(|（|\n|$)");
     }
 
-    private void TooltipWeatherAdd(uint parentId, AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* tooltipArgs)
+    private void ModifyWeatherTooltip(AtkTooltipManager* manager, AtkTooltipManager.AtkTooltipType type, ushort parentID, AtkResNode* targetNode, AtkTooltipManager.AtkTooltipArgs* args)
     {
-        if (targetNode == null || NaviMap == null || parentId != NaviMap->Id) return;
-
-        var compNode = targetNode->ParentNode->GetAsAtkComponentNode();
-        if (compNode == null) return;
-
-        var imageNode = compNode->Component->UldManager.SearchNodeById(3)->GetAsAtkImageNode();
-        if (imageNode == null) return;
-
-        var iconId = imageNode->PartsList->Parts[imageNode->PartId].UldAsset->AtkTexture.Resource->IconId;
-        var weatherId = WeatherManager.Instance()->WeatherId;
-
-        if (LuminaGetter.TryGetRow<Weather>(weatherId, out var weather))
+        if (WeatherTooltipMidifyGuid != Guid.Empty)
         {
-            if (weather.Icon != iconId) return;
-            SeString processedStr = $"{tooltipArgs->Text} [{weatherId}]";
-
-            SetTooltipCStringPointer(ref tooltipArgs->Text, processedStr);
+            GameTooltipManager.RemoveWeatherTooltipModify(WeatherTooltipMidifyGuid);
+            WeatherTooltipMidifyGuid = Guid.Empty;
         }
-    }
 
-    private static unsafe void AddStatusesToMap(StatusManager statusesManager,ref Dictionary<uint, uint> map)
-    {
-        foreach (var statuse in statusesManager.Status)
-        {
-            if (statuse.StatusId == 0) continue;
-            if (!LuminaGetter.TryGetRow<RowStatus>(statuse.StatusId, out var status))
-                continue;
+        if (!ModuleConfig.ShowWeatherID) return;
 
-            map.TryAdd(status.Icon, status.RowId);
+        var weatherID = WeatherManager.Instance()->WeatherId;
+        if (!LuminaGetter.TryGetRow<Weather>(weatherID, out var weather)) return;
 
-            for (var i = 1; i <= statuse.Param; i++)
-                map.TryAdd((uint)(status.Icon + i), status.RowId);
-        }
-    }
-
-    protected static void SetTooltipCStringPointer(ref CStringPointer cStringPointer, SeString seString)
-    {
-        var bytes = seString.EncodeWithNullTerminator();
-        var ptr = (byte*)Marshal.AllocHGlobal(bytes.Length);
-
-        for (var i = 0; i < bytes.Length; i++)
-            ptr[i] = bytes[i];
-
-        cStringPointer = ptr;
+        WeatherTooltipMidifyGuid = GameTooltipManager.AddWeatherTooltipModify($" [{weatherID}]", TooltipModifyMode.Append);
     }
 
     protected override void Uninit()
     {
-        MapIdEntry.Remove();
-        MapIdEntry = null;
+        MapIDEntry?.Remove();
+        MapIDEntry = null;
+
+        GameTooltipManager.Unreg((GameTooltipManager.GenerateItemTooltipModifierDelegate)ModifyItemTooltip);
+        GameTooltipManager.Unreg((GameTooltipManager.GenerateActionTooltipModifierDelegate)ModifyActionTooltip);
+        GameTooltipManager.Unreg(ModifyStatuTooltip);
+        GameTooltipManager.Unreg(ModifyWeatherTooltip);
 
         DService.AddonLifecycle.UnregisterListener(OnAddon);
+    }
 
-        GenerateItemTooltipHook.Disable();
-        ActionTooltipHook.Disable();
-        ActionHoveredHook.Disable();
-        TooltipShowHook.Disable();
+    protected static void SetTooltipCStringPointer(ref CStringPointer text, SeString seString)
+    {
+        var bytes = seString.EncodeWithNullTerminator();
+        var ptr = (byte*)Marshal.AllocHGlobal(bytes.Length);
+        for (var i = 0; i < bytes.Length; i++)
+            ptr[i] = bytes[i];
+        text = ptr;
+    }
+
+    private static unsafe void AddStatusesToMap(StatusManager statusManager, ref Dictionary<uint, uint> map)
+    {
+        foreach (var s in statusManager.Status)
+        {
+            if (s.StatusId == 0) continue;
+            if (!LuminaGetter.TryGetRow<RowStatus>(s.StatusId, out var row))
+                continue;
+            map.TryAdd(row.Icon, row.RowId);
+            for (var i = 1; i <= s.Param; i++)
+                map.TryAdd((uint)(row.Icon + i), row.RowId);
+        }
     }
 
     public class Config : ModuleConfiguration
     {
-        public bool ShowItemId                   =  true;
-        public bool ItemIdUseHexId               = false;
-        public bool ItemIdUseBothHexAndDecimal   = false;
+        public bool ShowItemID                   = true;
+        public bool ItemIDUseHexID               = false;
+        public bool ItemIDUseBothHexAndDecimal   = false;
 
-        public bool ShowActionId                 =  true;
-        public bool ActionIdUseHex               = false;
-        public bool ActionIdUseBothHexAndDecimal = false;
-        public bool ShowResolvedActionId         = false;
-        public bool ShowOriginalActionId         = false;
+        public bool ShowActionID                 = true;
+        public bool ActionIDUseHex               = false;
+        public bool ActionIDUseBothHexAndDecimal = false;
+        public bool ShowResolvedActionID         = false;
+        public bool ShowOriginalActionID         = false;
 
-        public bool ShowBuffId                   = false;
-        public bool ShowWeatherId                = false;
-        public bool ShowMapId                    = false;
-        public bool ShowTargetId                 = false;
+        public bool ShowStatuID                  = false;
+        public bool ShowWeatherID                = false;
+        public bool ShowMapID                    = false;
+        public bool ShowTargetID                 = false;
 
-        public bool ShowBattleNpcTargetId        = false;
-        public bool ShowCompanionTargetId        = false;
-        public bool ShowEventNpcTargetId         = false;
-        public bool ShowOthersTargetId           = false;
+        public bool ShowBattleNpcTargetID        = false;
+        public bool ShowCompanionTargetID        = false;
+        public bool ShowEventNpcTargetID         = false;
+        public bool ShowOthersTargetID           = false;
     }
 }

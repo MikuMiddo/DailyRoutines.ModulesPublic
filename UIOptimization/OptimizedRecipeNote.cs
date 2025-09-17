@@ -1087,11 +1087,12 @@ public class OptimizedRecipeNote : DailyModuleBase
 
             var scrollingAreaNode = new ScrollingAreaNode<VerticalListNode>
             {
-                Position      = ContentStartPosition + new Vector2(5, 48),
-                Size          = ContentSize          - new Vector2(5, 48),
-                ContentHeight = ShopInfo.NPCInfos.Count(x => x.Location != null) * 33,
-                ScrollSpeed   = 100,
-                IsVisible     = true,
+                Position          = ContentStartPosition + new Vector2(5, 48),
+                Size              = ContentSize          - new Vector2(5, 48),
+                ContentHeight     = ShopInfo.NPCInfos.Count(x => x.Location != null) * 33,
+                ScrollSpeed       = 100,
+                IsVisible         = true,
+                AutoHideScrollBar = true,
             };
             AttachNode(scrollingAreaNode);
 

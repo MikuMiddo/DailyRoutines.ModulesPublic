@@ -1,6 +1,7 @@
 using System.Linq;
 using DailyRoutines.Abstracts;
 using Dalamud.Game.Addon.Events;
+using Dalamud.Game.Addon.Events.EventDataTypes;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
@@ -57,8 +58,7 @@ public class WeeklyBingoClickToOpen : DailyModuleBase
         foreach (var index in Enumerable.Range(0, 16))
         {
             var dutySlot = addon->DutySlotList[index];
-            var handle = DService.AddonEvent.AddEvent((nint)addon, (nint)dutySlot.DutyButton->OwnerNode,
-                                                      AddonEventType.ButtonClick, OnDutySlotClick);
+            var handle   = DService.AddonEvent.AddEvent((nint)addon, (nint)dutySlot.DutyButton->OwnerNode, AddonEventType.ButtonClick, OnDutySlotClick);
             eventHandles[index] = handle;
         }
     }

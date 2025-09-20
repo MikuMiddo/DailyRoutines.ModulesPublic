@@ -48,9 +48,10 @@ public unsafe class AutoDisplayIDInfomation : DailyModuleBase
         GameTooltipManager.RegTooltipShowModifier(ModifyStatuTooltip);
         GameTooltipManager.RegTooltipShowModifier(ModifyWeatherTooltip);
 
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,          "ActionDetail", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,            "ItemDetail", OnAddon);
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PreDraw,  "_TargetInfoMainTarget", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,         "ActionDetail", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,           "ItemDetail", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PreDraw,           "_TargetInfo", OnAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, "_TargetInfoMainTarget", OnAddon);
 
         FrameworkManager.Register(OnUpdate, throttleMS: 1000);
     }
@@ -161,17 +162,14 @@ public unsafe class AutoDisplayIDInfomation : DailyModuleBase
                 itemTextnode->TextFlags |= TextFlags.MultiLine;
                 break;
             
-            case "_TargetInfoMainTarget":
-                if (TargetInfoMainTarget == null) return;
-                
-                var targetNameNode = TargetInfoMainTarget->GetNodeById(10)->GetAsAtkTextNode();
+            case "_TargetInfoMainTarget" or "_TargetInfo":
                 var target = DService.Targets.Target;
-                if (targetNameNode == null || target == null) return;
+                if (target == null) return;
 
                 var id = target.DataId;
                 if (id == 0) return;
-                
-                var name = targetNameNode->NodeText.ExtractText();
+
+                var name = AtkStage.Instance()->GetStringArrayData(StringArrayType.Hud2)->StringArray->ExtractText();
                 var show = target.ObjectKind switch
                 {
                     ObjectKind.BattleNpc => ModuleConfig.ShowTargetIDBattleNPC,
@@ -182,12 +180,12 @@ public unsafe class AutoDisplayIDInfomation : DailyModuleBase
                 
                 if (!show || !ModuleConfig.ShowTargetID)
                 {
-                    targetNameNode->NodeText.SetString(name.Replace($"  [{id}]", string.Empty));
+                    AtkStage.Instance()->GetStringArrayData(StringArrayType.Hud2)->SetValueAndUpdate(0, name.Replace($"  [{id}]", string.Empty));
                     return;
                 }
 
                 if (!name.Contains($"[{id}]"))
-                    targetNameNode->NodeText.SetString($"{name}  [{id}]");
+                    AtkStage.Instance()->GetStringArrayData(StringArrayType.Hud2)->SetValueAndUpdate(0, $"{name}  [{id}]");
                 break;
         }
     }
@@ -351,6 +349,11 @@ public unsafe class AutoDisplayIDInfomation : DailyModuleBase
         GameTooltipManager.Unreg(generateActionModifiers: ModifyActionTooltip);
         GameTooltipManager.Unreg(ModifyStatuTooltip);
         GameTooltipManager.Unreg(ModifyWeatherTooltip);
+
+        GameTooltipManager.RemoveItemDetailTooltipModify(ItemTooltipModityGuid);
+        GameTooltipManager.RemoveItemDetailTooltipModify(ActionTooltipModityGuid);
+        GameTooltipManager.RemoveItemDetailTooltipModify(StatuTooltipModityGuid);
+        GameTooltipManager.RemoveWeatherTooltipModify(WeatherTooltipModifyGuid);
 
         DService.AddonLifecycle.UnregisterListener(OnAddon);
         FrameworkManager.Unregister(OnUpdate);

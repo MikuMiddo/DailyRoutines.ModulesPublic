@@ -9,12 +9,12 @@ using FFXIVClientStructs.FFXIV.Component.Text;
 
 namespace DailyRoutines.ModulesPublic;
 
-public unsafe class OptimizedBubbleDisplay : DailyModuleBase
+public unsafe class OptimizedChatBubble : DailyModuleBase
 {
     public override ModuleInfo Info { get; } = new()
     {
-        Title = GetLoc("OptimizedBubbleDisplayTitle"),
-        Description = GetLoc("OptimizedBubbleDisplayDescription"),
+        Title = GetLoc("OptimizedChatBubbleTitle"),
+        Description = GetLoc("OptimizedChatBubbleDescription"),
         Category = ModuleCategories.UIOptimization,
         Author = ["Middo","Xww"]
     };
@@ -31,8 +31,7 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
     private delegate uint GetStringSizeDelegate(TextChecker* textChecker, Utf8String* str);
     private static readonly GetStringSizeDelegate GetStringSize = GetStringSizeSig.GetDelegate<GetStringSizeDelegate>();
 
-    private static readonly CompSig ShowMiniTalkPlayerSig = new("0F 84 ?? ?? ?? ?? ?? ?? ?? 48 8B CF 49 89 46");
-    private static readonly MemoryPatch ShowMiniTalkPlayerPatch = new(ShowMiniTalkPlayerSig.Get(), [0x90, 0xE9]);
+    private static readonly MemoryPatch ShowMiniTalkPlayerPatch = new("0F 84 ?? ?? ?? ?? ?? ?? ?? 48 8B CF 49 89 46", [0x90, 0xE9]);
 
     private static Config ModuleConfig = null!;
 
@@ -53,7 +52,7 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
 
     protected override void ConfigUI()
     {
-        if (ImGui.Checkbox(GetLoc("OptimizedBubbleDisplay-IsShowInCombat"), ref ModuleConfig.IsShowInCombat))
+        if (ImGui.Checkbox(GetLoc("OptimizedChatBubble-IsShowInCombat"), ref ModuleConfig.IsShowInCombat))
         {
             SaveConfig(ModuleConfig);
             ShowMiniTalkPlayerPatch.Set(ModuleConfig.IsShowInCombat);
@@ -62,7 +61,7 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
         using (ImRaii.ItemWidth(80f * GlobalFontScale))
         using (ImRaii.PushIndent())
         {
-            ImGui.InputInt(GetLoc("OptimizedBubbleDisplay-MaxLines"), ref ModuleConfig.MaxLines, 1);
+            ImGui.InputInt(GetLoc("OptimizedChatBubble-MaxLines"), ref ModuleConfig.MaxLines, 1);
             if (ImGui.IsItemDeactivatedAfterEdit())
             {
                 ModuleConfig.MaxLines = Math.Clamp(ModuleConfig.MaxLines, 1, 7);
@@ -70,14 +69,14 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
             }
 
             var timeSeconds = ModuleConfig.Duration / 1000f;
-            ImGui.InputFloat(GetLoc("OptimizedBubbleDisplay-Duration"), ref timeSeconds, 0.1f, 1f, "%.1f");
+            ImGui.InputFloat(GetLoc("OptimizedChatBubble-Duration"), ref timeSeconds, 0.1f, 1f, "%.1f");
             if (ImGui.IsItemDeactivatedAfterEdit())
             {
                 ModuleConfig.Duration = Math.Clamp((int)MathF.Round(timeSeconds * 10), 10, 600) * 100;
                 SaveConfig(ModuleConfig);
             }
 
-            ImGui.InputInt(GetLoc("OptimizedBubbleDisplay-AddDurationPerCharacter"), ref ModuleConfig.AddDurationPerCharacter, 1, 10);
+            ImGui.InputInt(GetLoc("OptimizedChatBubble-AddDurationPerCharacter"), ref ModuleConfig.AddDurationPerCharacter, 1, 10);
             if (ImGui.IsItemDeactivatedAfterEdit())
                 SaveConfig(ModuleConfig);
         }
@@ -138,7 +137,7 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    public struct ChatBubbleEntry
+    private struct ChatBubbleEntry
     {
         [FieldOffset(0x000)] public Utf8String String;
         [FieldOffset(0x1B8)] public long Timestamp;
@@ -149,6 +148,6 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
         public bool IsShowInCombat          = false;
         public int  MaxLines                = 2;
         public int  Duration                = 4000;
-        public int  AddDurationPerCharacter = 0;
+        public int  AddDurationPerCharacter;
     }
 }

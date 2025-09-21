@@ -1,12 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using DailyRoutines.Abstracts;
 using Dalamud;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.Text;
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 
 namespace DailyRoutines.ModulesPublic;
@@ -53,7 +53,7 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
         getStringSize = GetStringSizeSig.GetDelegate<GetStringSize>();
         ShowMiniTalkPlayerAddress = ShowMiniTalkPlayerSig.ScanText();
 
-        if (ModuleConfig.IsShowInCombat) 
+        if (ModuleConfig.IsShowInCombat)
             SafeMemory.WriteBytes(ShowMiniTalkPlayerAddress, [0x90, 0xE9]);
     }
 
@@ -77,7 +77,7 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
                 ModuleConfig.MaxLines = Math.Clamp(ModuleConfig.MaxLines, 1, 7);
                 SaveConfig(ModuleConfig);
             }
-                
+
             var timeSeconds = ModuleConfig.Duration / 1000f;
             ImGui.InputFloat(GetLoc("OptimizedBubbleDisplay-Duration"), ref timeSeconds, 0.1f, 1f, "%.1f");
             if (ImGui.IsItemDeactivatedAfterEdit())
@@ -85,33 +85,35 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
                 ModuleConfig.Duration = Math.Clamp((int)MathF.Round(timeSeconds * 10), 10, 600) * 100;
                 SaveConfig(ModuleConfig);
             }
-            
+
             ImGui.InputInt(GetLoc("OptimizedBubbleDisplay-AddDurationPerCharacter"), ref ModuleConfig.AddDurationPerCharacter, 1, 10);
             if (ImGui.IsItemDeactivatedAfterEdit())
                 SaveConfig(ModuleConfig);
         }
     }
 
-    private ulong ChatBubbleDetour(ChatBubbleStruct* chatBubbleStruct) {
-        try 
+    private ulong ChatBubbleDetour(ChatBubbleStruct* chatBubbleStruct)
+    {
+        try
         {
             return ChatBubbleHook.Original(chatBubbleStruct);
-        } 
-        finally 
+        }
+        finally
         {
             chatBubbleStruct->LineCount = (byte)Math.Clamp(ModuleConfig.MaxLines, 1, 7);
 
-            newBubbles.RemoveWhere(b => {
+            newBubbles.RemoveWhere(b =>
+            {
                 var bubble = (ChatBubbleEntry*)b;
-                if (bubble->Timestamp < 200) 
+                if (bubble->Timestamp < 200)
                 {
-                    if (bubble->Timestamp >= 0) 
+                    if (bubble->Timestamp >= 0)
                         bubble->Timestamp++;
                     return false;
                 }
 
                 bubble->Timestamp += (ModuleConfig.Duration - 4000);
-                if (ModuleConfig.AddDurationPerCharacter > 0) 
+                if (ModuleConfig.AddDurationPerCharacter > 0)
                 {
                     var characterCounts = getStringSize(&RaptureTextModule.Instance()->TextChecker, &bubble->String);
                     var additionalDuration = ModuleConfig.AddDurationPerCharacter * Math.Clamp(characterCounts, 0, 194 * ModuleConfig.MaxLines);
@@ -122,14 +124,15 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
         }
     }
 
-    private byte SetupChatBubbleDetour(nint unk, nint newBubble, nint a3) {
-        try 
+    private byte SetupChatBubbleDetour(nint unk, nint newBubble, nint a3)
+    {
+        try
         {
-            if (ModuleConfig.Duration != 4000 || ModuleConfig.AddDurationPerCharacter > 0) 
+            if (ModuleConfig.Duration != 4000 || ModuleConfig.AddDurationPerCharacter > 0)
                 newBubbles.Add(newBubble);
-            return SetupChatBubbleHook.Original(unk, newBubble, a3);;
-        } 
-        catch 
+            return SetupChatBubbleHook.Original(unk, newBubble, a3);
+        }
+        catch
         {
             return 0;
         }
@@ -144,12 +147,14 @@ public unsafe class OptimizedBubbleDisplay : DailyModuleBase
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    private struct ChatBubbleStruct {
+    private struct ChatBubbleStruct
+    {
         [FieldOffset(0x8C)] public byte LineCount;
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    public struct ChatBubbleEntry {
+    public struct ChatBubbleEntry
+    {
         [FieldOffset(0x000)] public Utf8String String;
         [FieldOffset(0x1B8)] public long Timestamp;
     }

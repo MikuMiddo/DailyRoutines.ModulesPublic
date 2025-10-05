@@ -71,9 +71,8 @@ public class AutoCancelMountCast : DailyModuleBase
                             {
                                 while (ModuleConfig.CancelWhenMove && IsOnMountCasting && !CancelWhenMoveCancelSource.IsCancellationRequested)
                                 {
-                                    if (!LocalPlayerState.IsMoving) continue;
-
-                                    ExecuteCancelCast();
+                                    if (LocalPlayerState.IsMoving) 
+                                        ExecuteCancelCast();
 
                                     await Task.Delay(10, CancelWhenMoveCancelSource.Token);
                                 }

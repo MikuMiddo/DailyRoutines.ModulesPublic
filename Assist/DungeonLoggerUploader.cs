@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using DailyRoutines.Abstracts;
+using DailyRoutines.Helpers;
 using Dalamud.Utility;
 using Lumina.Excel.Sheets;
 using Newtonsoft.Json;
@@ -41,11 +42,8 @@ public class DungeonLoggerUploader : DailyModuleBase
     {
         ModuleConfig = LoadConfig<Config>() ?? new();
 
-        Cookies    = new CookieContainer();
-        HttpClientInstance = new HttpClient(new HttpClientHandler { CookieContainer = Cookies })
-        {
-            BaseAddress = new Uri(ModuleConfig.ServerUrl)
-        };
+        Cookies            = new CookieContainer();
+        HttpClientInstance = HttpClientHelper.Get(new HttpClientHandler { CookieContainer = Cookies }, "DungeonLoggerUploader-Client");
 
         DService.ClientState.TerritoryChanged += OnTerritoryChanged;
         DService.DutyState.DutyCompleted      += OnDutyCompleted;
@@ -60,14 +58,10 @@ public class DungeonLoggerUploader : DailyModuleBase
         {
             ImGui.TextColored(KnownColor.GrayText.ToVector4(), "服务器设置");
 
-            ImGui.SetNextItemWidth(300);
+            ImGui.SetNextItemWidth(300 * GlobalFontScale);
             ImGui.InputText("服务器地址", ref ModuleConfig.ServerUrl, 256);
             if (ImGui.IsItemDeactivatedAfterEdit())
-            {
                 SaveConfig(ModuleConfig);
-                if (HttpClientInstance is not null)
-                    HttpClientInstance.BaseAddress = new Uri(ModuleConfig.ServerUrl);
-            }
             ImGui.SameLine();
             if (ImGui.Button("进入网站"))
                 Util.OpenLink(ModuleConfig.ServerUrl);
@@ -79,7 +73,7 @@ public class DungeonLoggerUploader : DailyModuleBase
         {
             ImGui.TextColored(KnownColor.GrayText.ToVector4(), "账户设置");
 
-            ImGui.SetNextItemWidth(200);
+            ImGui.SetNextItemWidth(200 * GlobalFontScale);
             ImGui.InputText("用户名", ref ModuleConfig.Username, 128);
             if (ImGui.IsItemDeactivatedAfterEdit())
             {
@@ -87,7 +81,7 @@ public class DungeonLoggerUploader : DailyModuleBase
                 IsLoggedIn = false;
             }
 
-            ImGui.SetNextItemWidth(200);
+            ImGui.SetNextItemWidth(200 * GlobalFontScale);
             ImGui.InputText("密码", ref ModuleConfig.Password, 128, ImGuiInputTextFlags.Password);
             if (ImGui.IsItemDeactivatedAfterEdit())
             {
@@ -104,9 +98,7 @@ public class DungeonLoggerUploader : DailyModuleBase
                 ImGui.TextColored(KnownColor.Red.ToVector4(), "未登录");
         }
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
+        ImGui.NewLine();
 
         using (ImRaii.Group())
         {
@@ -171,7 +163,7 @@ public class DungeonLoggerUploader : DailyModuleBase
             };
 
             var content  = new StringContent(JsonConvert.SerializeObject(loginData), Encoding.UTF8, "application/json");
-            var response = await HttpClientInstance.PostAsync("/api/login", content);
+            var response = await HttpClientInstance.PostAsync($"{ModuleConfig.ServerUrl}/api/login", content);
 
             if (!response.IsSuccessStatusCode) return;
 
@@ -214,7 +206,7 @@ public class DungeonLoggerUploader : DailyModuleBase
                 return;
             }
 
-            var mazeResponse = await HttpClientInstance.GetAsync("/api/stat/maze"); // 获取副本列表，通过名称匹配找到 mazeId
+            var mazeResponse = await HttpClientInstance.GetAsync($"{ModuleConfig.ServerUrl}/api/stat/maze"); // 获取副本列表，通过名称匹配找到 mazeId
             if (!mazeResponse.IsSuccessStatusCode)
             {
                 if (ModuleConfig.ShowNotification)
@@ -233,7 +225,7 @@ public class DungeonLoggerUploader : DailyModuleBase
                 return;
             }
 
-            var profResponse = await HttpClientInstance.GetAsync("/api/stat/prof"); // 获取职业列表，通过名称匹配找到 profKey
+            var profResponse = await HttpClientInstance.GetAsync($"{ModuleConfig.ServerUrl}/api/stat/prof"); // 获取职业列表，通过名称匹配找到 profKey
             if (!profResponse.IsSuccessStatusCode)
             {
                 if (ModuleConfig.ShowNotification)
@@ -259,7 +251,7 @@ public class DungeonLoggerUploader : DailyModuleBase
             };
 
             var content  = new StringContent(JsonConvert.SerializeObject(uploadData), Encoding.UTF8, "application/json");
-            var response = await HttpClientInstance.PostAsync("/api/record", content);
+            var response = await HttpClientInstance.PostAsync($"{ModuleConfig.ServerUrl}/api/record", content);
 
             if (response.IsSuccessStatusCode)
             {
@@ -295,10 +287,9 @@ public class DungeonLoggerUploader : DailyModuleBase
         DService.ClientState.TerritoryChanged -= OnTerritoryChanged;
         DService.DutyState.DutyCompleted      -= OnDutyCompleted;
 
-        HttpClientInstance?.Dispose();
-        HttpClientInstance  = null;
-        Cookies             = null;
-        IsLoggedIn          = false;
+        HttpClientInstance = null;
+        Cookies            = null;
+        IsLoggedIn         = false;
     }
 
     #region DungeonLogger网站Response数据结构

@@ -105,14 +105,17 @@ public class DungeonLoggerUploader : DailyModuleBase
             if (ImGui.Checkbox("自动上传", ref ModuleConfig.AutoUpload))
                 SaveConfig(ModuleConfig);
             ImGui.SameLine();
-            if (ImGui.Checkbox("弹出通知", ref ModuleConfig.ShowNotification))
+            if (ImGui.Checkbox("发送通知", ref ModuleConfig.SendNotification))
                 SaveConfig(ModuleConfig);
         }
     }
 
-    private void OnTerritoryChanged(ushort territoryID)
+    private void OnTerritoryChanged(ushort _)
     {
         if (!IsLoggedIn) return;
+
+        var territoryID = GameState.TerritoryType;
+        if (territoryID == 0) return;
 
         if (!LuminaGetter.TryGetRow<TerritoryType>(territoryID, out var territory)) return;
 
@@ -136,7 +139,7 @@ public class DungeonLoggerUploader : DailyModuleBase
         DungeonName = contentFinderCondition.Value.Name.ExtractText();
         JobName     = LocalPlayerState.ClassJobData.Name.ExtractText();
 
-        if (ModuleConfig.ShowNotification)
+        if (ModuleConfig.SendNotification)
             NotificationInfo("进入指导者任务副本，完成后将进行记录。");
     }
 
@@ -173,20 +176,20 @@ public class DungeonLoggerUploader : DailyModuleBase
             if (result?.Code == 0)
             {
                 IsLoggedIn = true;
-                if (showNotification && ModuleConfig.ShowNotification)
+                if (showNotification && ModuleConfig.SendNotification)
                     NotificationSuccess("DungeonLogger 登录成功");
             }
             else
             {
                 IsLoggedIn = false;
-                if (showNotification && ModuleConfig.ShowNotification)
+                if (showNotification && ModuleConfig.SendNotification)
                     NotificationError($"DungeonLogger 登录失败: {result?.Msg}");
             }
         }
         catch (Exception ex)
         {
             IsLoggedIn = false;
-            if (showNotification && ModuleConfig.ShowNotification)
+            if (showNotification && ModuleConfig.SendNotification)
                 NotificationError($"DungeonLogger 登录异常: {ex.Message}");
         }
     }
@@ -201,7 +204,7 @@ public class DungeonLoggerUploader : DailyModuleBase
 
             if (!IsLoggedIn)
             {
-                if (ModuleConfig.ShowNotification)
+                if (ModuleConfig.SendNotification)
                     NotificationError("副本记录上传失败: 未登录或登录失败");
                 return;
             }
@@ -209,7 +212,7 @@ public class DungeonLoggerUploader : DailyModuleBase
             var mazeResponse = await HttpClientInstance.GetAsync($"{ModuleConfig.ServerUrl}/api/stat/maze"); // 获取副本列表，通过名称匹配找到 mazeId
             if (!mazeResponse.IsSuccessStatusCode)
             {
-                if (ModuleConfig.ShowNotification)
+                if (ModuleConfig.SendNotification)
                     NotificationError($"副本记录上传失败: HTTP {mazeResponse.StatusCode}");
                 return;
             }
@@ -220,7 +223,7 @@ public class DungeonLoggerUploader : DailyModuleBase
 
             if (maze is null)
             {
-                if (ModuleConfig.ShowNotification)
+                if (ModuleConfig.SendNotification)
                     NotificationError($"副本记录上传失败: 未找到副本: {DungeonName}");
                 return;
             }
@@ -228,7 +231,7 @@ public class DungeonLoggerUploader : DailyModuleBase
             var profResponse = await HttpClientInstance.GetAsync($"{ModuleConfig.ServerUrl}/api/stat/prof"); // 获取职业列表，通过名称匹配找到 profKey
             if (!profResponse.IsSuccessStatusCode)
             {
-                if (ModuleConfig.ShowNotification)
+                if (ModuleConfig.SendNotification)
                     NotificationError($"副本记录上传失败: HTTP {profResponse.StatusCode}");
                 return;
             }
@@ -239,7 +242,7 @@ public class DungeonLoggerUploader : DailyModuleBase
 
             if (prof is null)
             {
-                if (ModuleConfig.ShowNotification)
+                if (ModuleConfig.SendNotification)
                     NotificationError($"副本记录上传失败: 未找到职业: {JobName}");
                 return;
             }
@@ -260,24 +263,24 @@ public class DungeonLoggerUploader : DailyModuleBase
 
                 if (result?.Code == 0)
                 {
-                    if (ModuleConfig.ShowNotification)
+                    if (ModuleConfig.SendNotification)
                         NotificationSuccess("副本记录上传成功");
                 }
                 else
                 {
-                    if (ModuleConfig.ShowNotification)
+                    if (ModuleConfig.SendNotification)
                         NotificationError($"副本记录上传失败: {result?.Msg ?? "Unknown error"}");
                 }
             }
             else
             {
-                if (ModuleConfig.ShowNotification)
+                if (ModuleConfig.SendNotification)
                     NotificationError($"副本记录上传失败: HTTP {response.StatusCode}");
             }
         }
         catch (Exception ex)
         {
-            if (ModuleConfig.ShowNotification)
+            if (ModuleConfig.SendNotification)
                 NotificationError($"副本记录上传失败: {ex.Message}");
         }
     }
@@ -347,9 +350,9 @@ public class DungeonLoggerUploader : DailyModuleBase
     private class Config : ModuleConfiguration
     {
         public string ServerUrl        = "https://dlog.luyulight.cn";
-        public string Username         = "";
-        public string Password         = "";
+        public string Username         = string.Empty;
+        public string Password         = string.Empty;
         public bool   AutoUpload       = true;
-        public bool   ShowNotification = true;
+        public bool   SendNotification = true;
     }
 }

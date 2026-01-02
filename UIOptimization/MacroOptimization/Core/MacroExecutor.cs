@@ -6,11 +6,10 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFAction = Lumina.Excel.Sheets.Action;
 using GameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 using Lumina.Excel.Sheets;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using System.Runtime.InteropServices;
 
 namespace DailyRoutines.ModulesPublic;
 
@@ -174,7 +173,7 @@ public unsafe partial class MacroOptimization
 
         if (IsWaitingActionExecution)
         {
-            if (ExecutionDetector != null && ExecutionDetector.TryClaimExecution(PendingActionID, this)) // 尝试认领执行结果 (如果两个宏尝试执行相同技能会导致错误的竞争 使用所有权管理解决)
+            if (ActionRecordingManager.ExecutionDetector != null && ActionRecordingManager.ExecutionDetector.TryClaimExecution(PendingActionID, this)) // 尝试认领执行结果 (如果两个宏尝试执行相同技能会导致错误的竞争 使用所有权管理解决)
             {
                 IsWaitingActionExecution = false;
                 if (LineToProgressMap.TryGetValue(CurrentLineIndex, out var progressIndex))
@@ -314,7 +313,7 @@ public unsafe partial class MacroOptimization
             }
         }
 
-        cleanLine = Regex.Replace(cleanLine, @"<(?![Ww]ait\.)([^>]+)>", m => "<" + m.Groups[1].Value.Replace(" ", "") + ">"); // 移除目标后缀内的空格（排除wait）
+        cleanLine = Regex.Replace(cleanLine, @"<(?![Ww]ait\.)([^>]+)>", m => "<" + NormalizePlaceholderForExecution(m.Groups[1].Value) + ">"); // 规范化目标后缀（排除wait）
 
         var isBattleSkill = IsBattleSkill(actionID); // 如果是战斗技能，先记录等待执行确认的状态，再发送命令
         if (isBattleSkill && actionID > 0)
@@ -455,7 +454,7 @@ public unsafe partial class MacroOptimization
         return false;
     }
 
-    private static bool EvaluateCondition(string line)
+    internal static bool EvaluateCondition(string line)
     {
         var match = Regex.Match(line, @"^/if\s+\[(.+?)\]\s+/", RegexOptions.IgnoreCase);
         if (!match.Success) return false;
@@ -466,7 +465,7 @@ public unsafe partial class MacroOptimization
         if (targetPrefixMatch.Success)
         {
             var targetType = targetPrefixMatch.Groups[1].Value.ToLower();
-            var actualCondition = targetPrefixMatch.Groups[2].Value;
+            var actualCondition = targetPrefixMatch.Groups[2].Value.Trim();
 
             if (targetType == "party")
             {
@@ -474,9 +473,12 @@ public unsafe partial class MacroOptimization
                 if (partyIndexMatch.Success)
                 {
                     var userIndex = int.Parse(partyIndexMatch.Groups[1].Value);
-                    var memberCondition = partyIndexMatch.Groups[2].Value;
+                    var memberCondition = partyIndexMatch.Groups[2].Value.Trim();
 
-                    var partyMembers = AgentHUD.Instance()->PartyMembers.ToArray();
+                    var agent = AgentHUD.Instance();
+                    if (agent == null) return false;
+
+                    var partyMembers = agent->PartyMembers.ToArray();
                     var member = partyMembers.FirstOrDefault(m => m.Index == userIndex);
                     if (member.Object == null) return false;
 
@@ -501,15 +503,15 @@ public unsafe partial class MacroOptimization
             return EvaluateConditionOnTarget(actualCondition, targetObject);
         }
 
-        if (Regex.Match(condition, @"^combat=(true|false)$", RegexOptions.IgnoreCase) is { Success: true } combatMatch)
+        if (Regex.Match(condition, @"^combat\s*=\s*(true|false)$", RegexOptions.IgnoreCase) is { Success: true } combatMatch)
         {
             var wantCombat = combatMatch.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase);
             return DService.Condition[ConditionFlag.InCombat] == wantCombat;
         }
 
-        if (Regex.Match(condition, @"^job=(.+)$", RegexOptions.IgnoreCase) is { Success: true } jobMatch)
+        if (Regex.Match(condition, @"^job\s*=\s*(.+)$", RegexOptions.IgnoreCase) is { Success: true } jobMatch)
         {
-            var jobName = jobMatch.Groups[1].Value;
+            var jobName = jobMatch.Groups[1].Value.Trim();
             return LocalPlayerState.ClassJobData.Name.ToString().Equals(jobName, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -524,11 +526,11 @@ public unsafe partial class MacroOptimization
         if (condition.Equals("none", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (Regex.Match(condition, @"^hp\s*(<=?|>=?|!=|=)\s*(\d+)$") is { Success: true } hpMatch)
+        if (Regex.Match(condition, @"^hp\s*(<=?|>=?|!=|=)\s*(\d+)$", RegexOptions.IgnoreCase) is { Success: true } hpMatch)
         {
             var op = hpMatch.Groups[1].Value;
             var threshold = float.Parse(hpMatch.Groups[2].Value);
-            var currentHpPercent = (float)target.CurrentHp / target.MaxHp * 100;
+            var currentHpPercent = target.MaxHp == 0 ? 0 : (float)target.CurrentHp / target.MaxHp * 100;
             return op switch
             {
                 "<"  => currentHpPercent <  threshold,
@@ -541,11 +543,11 @@ public unsafe partial class MacroOptimization
             };
         }
 
-        if (Regex.Match(condition, @"^mp\s*(<=?|>=?|!=|=)\s*(\d+)$") is { Success: true } mpMatch)
+        if (Regex.Match(condition, @"^mp\s*(<=?|>=?|!=|=)\s*(\d+)$", RegexOptions.IgnoreCase) is { Success: true } mpMatch)
         {
             var op = mpMatch.Groups[1].Value;
             var threshold = float.Parse(mpMatch.Groups[2].Value);
-            var currentMpPercent = (float)target.CurrentMp / target.MaxMp * 100;
+            var currentMpPercent = target.MaxMp == 0 ? 0 : (float)target.CurrentMp / target.MaxMp * 100;
             return op switch
             {
                 "<"  => currentMpPercent <  threshold,
@@ -589,9 +591,12 @@ public unsafe partial class MacroOptimization
 
     private static bool EvaluatePartyCondition(string condition) // 对队伍评估条件
     {
-        var partyMembers = AgentHUD.Instance()->PartyMembers.ToArray().Where(m => m.Object != null).ToArray();
+        var agent = AgentHUD.Instance();
+        if (agent == null) return false;
 
-        if (Regex.Match(condition, @"^hp\s*(<=?|>=?|!=|=)\s*(\d+)$") is { Success: true } hpMatch)
+        var partyMembers = agent->PartyMembers.ToArray().Where(m => m.Object != null).ToArray();
+
+        if (Regex.Match(condition, @"^hp\s*(<=?|>=?|!=|=)\s*(\d+)$", RegexOptions.IgnoreCase) is { Success: true } hpMatch)
         {
             var op = hpMatch.Groups[1].Value;
             var threshold = float.Parse(hpMatch.Groups[2].Value);
@@ -600,7 +605,7 @@ public unsafe partial class MacroOptimization
             {
                 if (DService.ObjectTable.CreateObjectReference((nint)member.Object) is IBattleChara chara)
                 {
-                    var hpPercent = (float)chara.CurrentHp / chara.MaxHp * 100;
+                    var hpPercent = chara.MaxHp == 0 ? 0 : (float)chara.CurrentHp / chara.MaxHp * 100;
                     var matchCondition = op switch
                     {
                         "<"  => hpPercent <  threshold,
@@ -628,7 +633,7 @@ public unsafe partial class MacroOptimization
             {
                 if (DService.ObjectTable.CreateObjectReference((nint)member.Object) is IBattleChara chara)
                 {
-                    var hpPercent = (float)chara.CurrentHp / chara.MaxHp * 100;
+                    var hpPercent = chara.MaxHp == 0 ? 0 : (float)chara.CurrentHp / chara.MaxHp * 100;
                     if (hpPercent < minHpPercent)
                         minHpPercent = hpPercent;
                 }
@@ -760,192 +765,37 @@ public unsafe partial class MacroOptimization
 
     #region 智能目标方法
 
+    private static string NormalizePlaceholderForExecution(string placeholderInnerText)
+    {
+        var normalized = Regex.Replace(placeholderInnerText, @"\s+", " ").Trim();
+        if (string.IsNullOrEmpty(normalized))
+            return placeholderInnerText.Replace(" ", string.Empty);
+
+        if (Regex.IsMatch(normalized, @"^(party|enemy)\s*\.", RegexOptions.IgnoreCase))
+        {
+            normalized = Regex.Replace(normalized, @"\s*\.\s*", ".", RegexOptions.IgnoreCase);
+            normalized = Regex.Replace(normalized, @"\s*!=\s*", "!=", RegexOptions.IgnoreCase);
+            normalized = Regex.Replace(normalized, @"\s*=\s*", "=", RegexOptions.IgnoreCase);
+            normalized = Regex.Replace(normalized, @"\s*:\s*", ":", RegexOptions.IgnoreCase);
+            return normalized;
+        }
+
+        return normalized.Replace(" ", string.Empty);
+    }
+
     private static bool CheckSmartTargetAvailability(string line, out GameObject* target)
     {
         target = null;
-        var targetMatch = Regex.Match(line, @"<(?![Ww]ait\.)([^>]+)>", RegexOptions.IgnoreCase);
-        if (!targetMatch.Success) return true; // 没有目标后缀，视为成功
 
-        var targetStr = targetMatch.Groups[1].Value.Replace(" ", "");
+        var targetMatch = Regex.Match(line, @"<(?![Ww]ait\.)[^>]+>", RegexOptions.IgnoreCase);
+        if (!targetMatch.Success)
+            return true;
 
-        if (!targetStr.StartsWith("party.", StringComparison.OrdinalIgnoreCase)) return true; // 不是智能目标，视为成功
+        var placeholder = targetMatch.Value;
+        if (!SmartTargets.IsSmartTargetPlaceholder(placeholder))
+            return true;
 
-        if (Regex.IsMatch(targetStr, @"^party\.minHp$", RegexOptions.IgnoreCase))
-            target = GetPartyMemberWithMinHp();
-        else if (Regex.IsMatch(targetStr, @"^party\.maxHp$", RegexOptions.IgnoreCase))
-            target = GetPartyMemberWithMaxHp();
-        else if (Regex.Match(targetStr, @"^party\.job=(.+)$", RegexOptions.IgnoreCase) is { Success: true } jobMatch)
-            target = GetPartyMemberByJob(jobMatch.Groups[1].Value);
-        else if (Regex.Match(targetStr, @"^party\.role=(.+)$", RegexOptions.IgnoreCase) is { Success: true } roleMatch)
-            target = GetPartyMemberByRole(roleMatch.Groups[1].Value);
-        else if (Regex.Match(targetStr, @"^party\.buff=(.+)$", RegexOptions.IgnoreCase) is { Success: true } buffMatch)
-            target = GetPartyMemberByBuff(buffMatch.Groups[1].Value, true);
-        else if (Regex.Match(targetStr, @"^party\.buff!=(.+)$", RegexOptions.IgnoreCase) is { Success: true } noBuffMatch)
-            target = GetPartyMemberByBuff(noBuffMatch.Groups[1].Value, false);
-        else if (Regex.Match(targetStr, @"^party\.(\d)$", RegexOptions.IgnoreCase) is { Success: true } numMatch)
-        {
-            var num = int.Parse(numMatch.Groups[1].Value);
-            if (num >= 1 && num <= 8)
-                target = GetPartyMemberByIndex(num - 1);
-        }
-
-        return target != null;
-    }
-
-    public static GameObject* GetPartyMemberWithMinHp()
-    {
-        var agent = AgentHUD.Instance();
-        if (agent == null) return null;
-
-        var hudPartyMember = agent->PartyMembers.ToArray()
-                                                .Where(x => x.Object != null && x.Object->GetIsTargetable() && !x.Object->IsDead())
-                                                .OrderBy(x => (float)x.Object->Health / x.Object->MaxHealth)
-                                                .FirstOrDefault();
-        return (GameObject*)hudPartyMember.Object;
-    }
-
-    public static GameObject* GetPartyMemberWithMaxHp()
-    {
-        var agent = AgentHUD.Instance();
-        if (agent == null) return null;
-
-        var hudPartyMember = agent->PartyMembers.ToArray()
-                                                .Where(x => x.Object != null && x.Object->GetIsTargetable() && !x.Object->IsDead())
-                                                .OrderByDescending(x => (float)x.Object->Health / x.Object->MaxHealth)
-                                                .FirstOrDefault();
-        return (GameObject*)hudPartyMember.Object;
-    }
-
-    public static GameObject* GetPartyMemberByJob(string jobName)
-    {
-        var agent = AgentHUD.Instance();
-        if (agent == null) return null;
-
-        var classJobSheet = DService.Data.GetExcelSheet<ClassJob>();
-        var targetJob = classJobSheet.FirstOrDefault(job =>
-            job.Name.ToString().Equals(jobName, StringComparison.OrdinalIgnoreCase) ||
-            job.Abbreviation.ToString().Equals(jobName, StringComparison.OrdinalIgnoreCase));
-
-        if (targetJob.RowId == 0) return null;
-
-        var hudPartyMember = agent->PartyMembers.ToArray()
-                                                .FirstOrDefault(x => x.Object != null && x.Object->GetIsTargetable() &&
-                                                           x.Object->ClassJob == targetJob.RowId);
-        return (GameObject*)hudPartyMember.Object;
-    }
-
-    public static GameObject* GetPartyMemberByRole(string roleName)
-    {
-        var agent = AgentHUD.Instance();
-        if (agent == null) return null;
-
-        byte targetRole = roleName.ToLowerInvariant() switch
-        {
-            "tank"   or "t"            => 1,
-            "healer" or "heal" or "h"  => 4,
-            "dps"    or "d"            => 2,
-            "melee"                    => 2,
-            "ranged" or "range"        => 3,
-            _                          => 0
-        };
-
-        if (targetRole == 0) return null;
-
-        var hudPartyMember = agent->PartyMembers.ToArray()
-                                                .FirstOrDefault(x =>
-                                                {
-                                                    if (x.Object == null || !x.Object->GetIsTargetable()) return false;
-                                                    var job = LuminaGetter.GetRow<ClassJob>(x.Object->ClassJob);
-                                                    return job?.Role == targetRole;
-                                                });
-        return (GameObject*)hudPartyMember.Object;
-    }
-
-    public static GameObject* GetPartyMemberByBuff(string buffStr, bool shouldHaveBuff)
-    {
-        var agent = AgentHUD.Instance();
-        if (agent == null) return null;
-
-        uint buffID = 0;
-        if (!uint.TryParse(buffStr, out buffID))
-        {
-            var statusSheet = DService.Data.GetExcelSheet<Lumina.Excel.Sheets.Status>();
-            var status = statusSheet.FirstOrDefault(s => s.Name.ToString().Equals(buffStr, StringComparison.OrdinalIgnoreCase));
-            buffID = status.RowId;
-        }
-
-        if (buffID == 0) return null;
-
-        var hudPartyMember = agent->PartyMembers.ToArray()
-                                                .FirstOrDefault(x =>
-                                                {
-                                                    if (x.Object == null || !x.Object->GetIsTargetable()) return false;
-                                                    var statusList = StatusList.CreateStatusListReference((nint)x.Object->GetStatusManager());
-                                                    if (statusList == null) return false;
-                                                    var hasBuff = statusList.HasStatus(buffID);
-                                                    return shouldHaveBuff ? hasBuff : !hasBuff;
-                                                });
-        return (GameObject*)hudPartyMember.Object;
-    }
-
-    public static GameObject* GetPartyMemberByIndex(int index)
-    {
-        var agent = AgentHUD.Instance();
-        if (agent == null) return null;
-
-        var partyMembers = agent->PartyMembers.ToArray();
-        if (index < 0 || index >= partyMembers.Length) return null;
-
-        var member = partyMembers[index];
-        return (GameObject*)member.Object;
-    }
-
-    public static GameObject* ResolvePlaceholderDetour(PronounModule* module, byte* str, byte a3, byte a4)
-    {
-        var orig = ResolvePlaceholderHook.Original(module, str, a3, a4);
-        if (orig != null) return orig;
-
-        var decoded = Marshal.PtrToStringUTF8((nint)str);
-        if (string.IsNullOrEmpty(decoded)) return null;
-
-        if (Regex.IsMatch(decoded, @"^<\s*party\s*\.\s*minHp\s*>$", RegexOptions.IgnoreCase)) // <party.minHp> - 血量最低的队友
-            return GetPartyMemberWithMinHp();
-
-        if (Regex.IsMatch(decoded, @"^<\s*party\s*\.\s*maxHp\s*>$", RegexOptions.IgnoreCase)) // <party.maxHp> - 血量最高的队友
-            return GetPartyMemberWithMaxHp();
-
-        if (Regex.Match(decoded, @"^<\s*party\s*\.\s*job\s*=\s*(.+?)\s*>$", RegexOptions.IgnoreCase) is { Success: true } jobMatch) // <party.job = 职业名> - 查找指定职业
-        {
-            var jobName = jobMatch.Groups[1].Value.Trim();
-            return GetPartyMemberByJob(jobName);
-        }
-
-        if (Regex.Match(decoded, @"^<\s*party\s*\.\s*role\s*=\s*(.+?)\s*>$", RegexOptions.IgnoreCase) is { Success: true } roleMatch) // <party.role = 角色> - 查找指定角色
-        {
-            var roleName = roleMatch.Groups[1].Value.Trim();
-            return GetPartyMemberByRole(roleName);
-        }
-
-        if (Regex.Match(decoded, @"^<\s*party\s*\.\s*buff\s*=\s*(.+?)\s*>$", RegexOptions.IgnoreCase) is { Success: true } buffMatch) // <party.buff = Buff名> - 查找有指定Buff的队友
-        {
-            var buffStr = buffMatch.Groups[1].Value.Trim();
-            return GetPartyMemberByBuff(buffStr, true);
-        }
-
-        if (Regex.Match(decoded, @"^<\s*party\s*\.\s*buff\s*!=\s*(.+?)\s*>$", RegexOptions.IgnoreCase) is { Success: true } noBuffMatch) // <party.buff != Buff名> - 查找没有指定Buff的队友
-        {
-            var buffStr = noBuffMatch.Groups[1].Value.Trim();
-            return GetPartyMemberByBuff(buffStr, false);
-        }
-
-        if (Regex.Match(decoded, @"^<\s*party\s*\.\s*(\d)\s*>$", RegexOptions.IgnoreCase) is { Success: true } partyNumMatch) // <party.1> 到 <party.8> - 队伍成员编号
-        {
-            var num = int.Parse(partyNumMatch.Groups[1].Value);
-            if (num >= 1 && num <= 8)
-                return GetPartyMemberByIndex(num - 1); // 转换为0-8索引
-        }
-
-        return null;
+        return SmartTargets.TryResolve(placeholder, out target);
     }
 
     #endregion

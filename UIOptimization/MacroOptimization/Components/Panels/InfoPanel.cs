@@ -807,7 +807,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         foreach (Match match in bracketMatches)
         {
             var bracketText = match.Value;
-            var innerText = bracketText[1..^1];
+            var innerText = bracketText[1..^1].Trim();
 
             if (string.IsNullOrEmpty(innerText))
                 return $"后缀不能为空: {bracketText}";
@@ -837,27 +837,50 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 continue;
             }
 
-            if (innerText.StartsWith("party.", StringComparison.OrdinalIgnoreCase)) // <party.xxx> 智能目标格式
+            var normalizedText = Regex.Replace(innerText, @"\s+", " ").Trim();
+
+            if (Regex.IsMatch(normalizedText, @"^(party|enemy)\s*\.", RegexOptions.IgnoreCase)) // <party.xxx> / <enemy.xxx> 智能目标格式
             {
-                if (Regex.IsMatch(bracketText, @"^<\s*party\s*\.\s*(minHp|maxHp)\s*>$", RegexOptions.IgnoreCase)) // party.minHp / party.maxHp
+                var smartText = Regex.Replace(normalizedText, @"(?:^|[\s,;|])order\s*=\s*(toTop|toBottom)(?:$|[\s,;|])", " ", RegexOptions.IgnoreCase);
+                smartText = Regex.Replace(smartText, @"(?:^|[\s,;|])toTop(?:$|[\s,;|])", " ", RegexOptions.IgnoreCase);
+                smartText = Regex.Replace(smartText, @"(?:^|[\s,;|])toBottom(?:$|[\s,;|])", " ", RegexOptions.IgnoreCase);
+                smartText = Regex.Replace(smartText, @"\s+", " ").Trim();
+
+                smartText = Regex.Replace(smartText, @"\s*\.\s*", ".", RegexOptions.IgnoreCase);
+                smartText = Regex.Replace(smartText, @"\s*!=\s*", "!=", RegexOptions.IgnoreCase);
+                smartText = Regex.Replace(smartText, @"\s*=\s*", "=", RegexOptions.IgnoreCase);
+                smartText = Regex.Replace(smartText, @"\s*:\s*", ":", RegexOptions.IgnoreCase);
+
+                if (Regex.IsMatch(smartText, @"^party\.(minHp|maxHp)$", RegexOptions.IgnoreCase)) // party.minHp / party.maxHp
                     continue;
 
-                if (Regex.IsMatch(bracketText, @"^<\s*party\s*\.\s*(\d)\s*>$", RegexOptions.IgnoreCase)) // party.1 到 party.8
+                if (Regex.Match(smartText, @"^party\.(\d)$", RegexOptions.IgnoreCase) is { Success: true } partyNumMatch) // party.1 到 party.8
                 {
-                    var numMatch = Regex.Match(bracketText, @"^<\s*party\s*\.\s*(\d)\s*>$", RegexOptions.IgnoreCase);
-                    var num = int.Parse(numMatch.Groups[1].Value);
+                    var num = int.Parse(partyNumMatch.Groups[1].Value);
                     if (num < 1 || num > 8)
                         return $"队伍编号必须在1-8之间: {bracketText}";
                     continue;
                 }
 
-                if (Regex.IsMatch(bracketText, @"^<\s*party\s*\.\s*job\s*=\s*.+\s*>$", RegexOptions.IgnoreCase))
+                if (Regex.IsMatch(smartText, @"^party\.job=.+$", RegexOptions.IgnoreCase))
                     continue;
 
-                if (Regex.IsMatch(bracketText, @"^<\s*party\s*\.\s*role\s*=\s*.+\s*>$", RegexOptions.IgnoreCase))
+                if (Regex.IsMatch(smartText, @"^party\.role=.+$", RegexOptions.IgnoreCase))
                     continue;
 
-                if (Regex.IsMatch(bracketText, @"^<\s*party\s*\.\s*buff\s*(!=|=)\s*.+\s*>$", RegexOptions.IgnoreCase))
+                if (Regex.IsMatch(smartText, @"^party\.buff(!=|=).+$", RegexOptions.IgnoreCase))
+                    continue;
+
+                if (Regex.IsMatch(smartText, @"^party\.(lowHp|lowHpOrMe|dead|near|far|dispellable|dispellableOrMe)$", RegexOptions.IgnoreCase))
+                    continue;
+
+                if (Regex.IsMatch(smartText, @"^party\.status(OrMe)?:\d+$", RegexOptions.IgnoreCase))
+                    continue;
+
+                if (Regex.IsMatch(smartText, @"^enemy\.(near|far|lowHp)$", RegexOptions.IgnoreCase))
+                    continue;
+
+                if (Regex.IsMatch(smartText, @"^enemy\.status:\d+$", RegexOptions.IgnoreCase))
                     continue;
 
                 return $"未知的智能目标格式: {bracketText}";

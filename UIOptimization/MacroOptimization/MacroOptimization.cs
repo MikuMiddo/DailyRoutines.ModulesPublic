@@ -2,17 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using System.Threading;
 using DailyRoutines.Abstracts;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
-using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using KamiToolKit.Nodes;
 using GameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
@@ -23,14 +19,10 @@ public unsafe partial class MacroOptimization : DailyModuleBase
     public override ModuleInfo Info { get; } = new()
     {
         Title = GetLoc("扩展宏"),
-        Description = GetLoc("添加扩展宏窗口"),
+        Description = GetLoc("添加可视化的宏编辑窗口，支持最大255行宏，包括智能录制宏功能与自动重复执行宏。对宏的执行添加条件判断与更加细化的智能目标选取功能。"),
         Category = ModuleCategories.UIOptimization,
         Author = ["Middo"]
     };
-
-    private static readonly CompSig                        ExecuteMacroSig = new("48 89 5C 24 ?? 41 56 48 83 EC ?? 80 B9 ?? ?? ?? ?? ?? 4C 8B F2");
-    private delegate        ulong                          ExecuteMacroDelegate(RaptureShellModule* raptureShellModule, RaptureMacroModule.Macro* macro);
-    private static          Hook<ExecuteMacroDelegate>?    ExecuteMacroHook;
 
     private static readonly CompSig                             ResolvePlaceholderSig = new("E8 ?? ?? ?? ?? 33 ED 4C 8B F8");
     private delegate        GameObject*                         ResolvePlaceholderDelegate(PronounModule* module, byte* str, byte a3, byte a4);
@@ -50,26 +42,17 @@ public unsafe partial class MacroOptimization : DailyModuleBase
     internal static DRMacroHelp?             MacroHelpAddon;
     private static TextButtonNode?          OpenMacroExtendButton;
 
-    // 其他
-    internal static ActionExecutionDetector? ExecutionDetector;
     internal static MacroConfig ModuleConfig = null!;
 
     protected override void Init()
     {
         TaskHelper ??= new() { TimeLimitMS = 15_000 };
 
-        ExecuteMacroHook = ExecuteMacroSig.GetHook<ExecuteMacroDelegate>(ExecuteMacroDetour);
-        ExecuteMacroHook.Enable();
+        NativeMacroTakeoverManager.Enable();
+        ActionRecordingManager.Enable(this);
 
-        ResolvePlaceholderHook = ResolvePlaceholderSig.GetHook<ResolvePlaceholderDelegate>(MacroExecutor.ResolvePlaceholderDetour);
+        ResolvePlaceholderHook = ResolvePlaceholderSig.GetHook<ResolvePlaceholderDelegate>(SmartTargets.ResolvePlaceholderDetour);
         ResolvePlaceholderHook.Enable();
-
-        ModuleConfig = LoadConfig<MacroConfig>() ?? new();
-        if (!File.Exists(ConfigFilePath))
-            SaveConfig(ModuleConfig);
-
-        ExecutionDetector = new ActionExecutionDetector();
-        ExecutionDetector.OnActionExecuted += OnActionExecutedHandler;
 
         MacroCacheHelper.InitializeGlobalActionCache();
         MacroCacheHelper.InitializeIconCache();
@@ -109,6 +92,10 @@ public unsafe partial class MacroOptimization : DailyModuleBase
 
         DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,    "Macro", OnMacroAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PreFinalize, "Macro", OnMacroAddon);
+
+        ModuleConfig = LoadConfig<MacroConfig>() ?? new();
+        if (!File.Exists(ConfigFilePath))
+            SaveConfig(ModuleConfig);
     }
 
     private static void OnMacroAddon(AddonEvent type, AddonArgs? args)
@@ -137,85 +124,6 @@ public unsafe partial class MacroOptimization : DailyModuleBase
                 OpenMacroExtendButton?.DetachNode();
                 OpenMacroExtendButton = null;
                 break;
-        }
-    }
-
-    private ulong ExecuteMacroDetour(RaptureShellModule* raptureShellModule, RaptureMacroModule.Macro* macro)
-    {
-        //MacroProcessAddon.OpenWithData(macro);
-
-        return ExecuteMacroHook.Original(raptureShellModule, macro);
-    }
-
-    private void OnActionExecutedHandler(ActionType actionType, uint actionID)
-    {
-        RecordActionCooldown(actionType, actionID);
-
-        if (MacroExtendAddon != null && MacroExtendAddon.IsRecording && MacroExtendAddon.IsOpen)
-            MacroExtendAddon.RecordAction(actionID);
-    }
-
-    private void RecordActionCooldown(ActionType actionType, uint actionID)
-    {
-        if (actionType == ActionType.CraftAction)
-        {
-            if (actionID <= 100000) return; // 生产技能：需要等待制作完成
-
-            var startTime = DateTime.UtcNow;
-            var recordedActionType = actionType;
-            var recordedActionID = actionID;
-
-            TaskHelper?.Enqueue(() => DService.Condition[ConditionFlag.ExecutingCraftingAction]); // 先等待进入执行状态，然后等待完成
-            TaskHelper?.Enqueue(() =>
-            {
-                if (DService.Condition[ConditionFlag.ExecutingCraftingAction])
-                    return false;
-
-                var cooldownMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds; // 制作完成，记录冷却时间
-                if (cooldownMs > 0 && cooldownMs < 10000)
-                {
-                    if (!ModuleConfig.ActionCooldowns.ContainsKey(recordedActionType))
-                        ModuleConfig.ActionCooldowns[recordedActionType] = [];
-
-                    ModuleConfig.ActionCooldowns[recordedActionType][recordedActionID] = cooldownMs;
-                    SaveConfig(ModuleConfig);
-                }
-                return true;
-            });
-        }
-        else if (actionType == ActionType.Action)
-        {
-            var startTime = DateTime.UtcNow;
-            var recordedActionType = actionType;
-            var recordedActionID = actionID;
-
-            TaskHelper?.Enqueue(() =>
-            {
-                var manager = ActionManager.Instance();
-                if (manager == null) return true;
-
-                if (MacroExecutor.IsPlayerCasting() || MacroExecutor.IsAnimationLocked())
-                    return false;
-
-                var elapsedTimeMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds; // 计算从开始到现在的时间（起手+动画锁）
-
-                var gcdRecast = manager->GetRecastTime(ActionType.Action, recordedActionID); // 获取复唱时间
-                var gcdTimeMs = (int)(gcdRecast * 1000);
-
-                var isAbility = MacroExecutor.IsAbilitySkill(recordedActionID);
-
-                var totalCooldownMs = isAbility ? elapsedTimeMs : Math.Max(elapsedTimeMs, gcdTimeMs); // 能力技录制起手+动画锁时间，GCD技能录制咏唱+复唱的较大值
-
-                if (totalCooldownMs > 0 && totalCooldownMs < 300000)
-                {
-                    if (!ModuleConfig.ActionCooldowns.ContainsKey(recordedActionType))
-                        ModuleConfig.ActionCooldowns[recordedActionType] = [];
-
-                    ModuleConfig.ActionCooldowns[recordedActionType][recordedActionID] = totalCooldownMs;
-                    SaveConfig(ModuleConfig);
-                }
-                return true;
-            });
         }
     }
 
@@ -254,13 +162,14 @@ public unsafe partial class MacroOptimization : DailyModuleBase
 
     protected override void Uninit()
     {
-        if (ExecutionDetector != null)
-        {
-            ExecutionDetector.OnActionExecuted -= OnActionExecutedHandler;
-            ExecutionDetector.Dispose();
-            ExecutionDetector = null;
-        }
+        NativeMacroTakeoverManager.Disable();
+        ActionRecordingManager.Disable();
 
+        ResolvePlaceholderHook?.Disable();
+        ResolvePlaceholderHook?.Dispose();
+        ResolvePlaceholderHook = null;
+
+        DService.AddonLifecycle.UnregisterListener(OnMacroAddon);
         OnMacroAddon(AddonEvent.PreFinalize, null);
 
         MacroExtendAddon?.Dispose();

@@ -354,10 +354,10 @@ public unsafe partial class MacroOptimization
         new("<party.dispellableOrMe>", "小队中有可驱散状态的成员（含自己）", "/ac 康复 <party.dispellableOrMe>"),
         new("<party.status:123>", "小队中拥有指定状态ID的成员（不含自己）", "/ac 治疗 <party.status:123>"),
         new("<party.statusOrMe:123>", "小队中拥有指定状态ID的成员（含自己）", "/ac 治疗 <party.statusOrMe:123>"),
-        //new("<enemy.near>", "距离自己最近的敌人", "/ac 连击 <enemy.near>"),
-        //new("<enemy.far>", "距离自己最远的敌人", "/ac 乾坤斗气弹 <enemy.far>"),
-        //new("<enemy.lowHp>", "当前范围内最低血的敌人", "/ac 斩铁剑 <enemy.lowHp>"),
-        //new("<enemy.status:123>", "拥有指定状态ID的敌人", "/ac 斩铁剑 <enemy.status:123>"),
+        new("<enemy.near>", "距离自己最近的敌人", "/ac 连击 <enemy.near>"),
+        new("<enemy.far>", "距离自己最远的敌人", "/ac 乾坤斗气弹 <enemy.far>"),
+        new("<enemy.lowHp>", "当前范围内最低血的敌人", "/ac 斩铁剑 <enemy.lowHp>"),
+        new("<enemy.status:123>", "拥有指定状态ID的敌人", "/ac 斩铁剑 <enemy.status:123>"),
     ];
 
     private static readonly HelpRow[] IfHelpRows =

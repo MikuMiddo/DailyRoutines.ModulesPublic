@@ -1031,11 +1031,11 @@ public unsafe partial class MacroOptimization
         if (manager == null)
             return originalName;
 
-        var ActionSheet = DService.Data.Excel.GetSheet<FFAction>();
-        if (ActionSheet == null)
+        var actionSheet = DService.Data.Excel.GetSheet<FFAction>();
+        if (actionSheet == null)
             return originalName;
 
-        foreach (var playerAction in ActionSheet) //GetAdjustedActionId在初始化时并不能获得所有的映射 只有在相应的技能可以被动作栏使用时才会有映射 
+        foreach (var playerAction in actionSheet) // GetAdjustedActionId 在初始化时并不能获得所有的映射；只有在相应的技能可以被动作栏使用时才会有映射
         {
             if (playerAction.IsPvP || !playerAction.IsPlayerAction || string.IsNullOrEmpty(playerAction.Name.ExtractText()))
                 continue;

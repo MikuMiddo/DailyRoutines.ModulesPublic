@@ -218,7 +218,7 @@ internal sealed unsafe class TextMultiLineInputNodeScrollable : ResNode
 
         private AtkComponentTextInput* TextComponent => (AtkComponentTextInput*)ComponentBase;
 
-        public event System.Action<float>? HeightChanged;
+        public event Action<float>? HeightChanged;
 
         public AutoHeightTextInputNode()
         {

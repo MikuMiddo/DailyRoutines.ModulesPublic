@@ -9,51 +9,51 @@ public unsafe partial class MacroOptimization
 {
     internal sealed class DRMacroSettings(DailyModuleBase instance) : NativeAddon
     {
-    private readonly DailyModuleBase Instance = instance;
+        private readonly DailyModuleBase Instance = instance;
 
-    private CheckboxNode?     LoopCheckbox;
-    private NumericInputNode? LoopCountInputNode;
-    private NumericInputNode? IntervalInputNode;
-    private NumericInputNode? CompletionDelayInputNode;
-    private TextNode?         LoopHintNode;
-    private TextNode?         LoopCountLabel;
-    private TextNode?         IntervalLabel;
-    private TextNode?         CompletionDelayLabel;
+        private CheckboxNode?     LoopCheckbox;
+        private NumericInputNode? LoopCountInputNode;
+        private NumericInputNode? IntervalInputNode;
+        private NumericInputNode? CompletionDelayInputNode;
+        private TextNode?         LoopHintNode;
+        private TextNode?         LoopCountLabel;
+        private TextNode?         IntervalLabel;
+        private TextNode?         CompletionDelayLabel;
 
-    internal int CurrentMacroIndex = -1;
+        internal int CurrentMacroIndex = -1;
 
-    protected override void OnSetup(AtkUnitBase* addon)
-    {
-        var initialIsLoopEnabled = false;
-        var initialLoopCount = 1;
-        var initialInterval = 2500;
-        if (CurrentMacroIndex >= 0 && CurrentMacroIndex < ModuleConfig.ExtendMacroLists.Count)
+        protected override void OnSetup(AtkUnitBase* addon)
         {
-            var macro = ModuleConfig.ExtendMacroLists[CurrentMacroIndex];
-            initialIsLoopEnabled = macro.IsLoopEnabled;
-            initialLoopCount = macro.LoopCount;
-            initialInterval = macro.DefaultInterval;
-        }
+            var initialIsLoopEnabled = false;
+            var initialLoopCount = 1;
+            var initialInterval = 2500;
+            if (CurrentMacroIndex >= 0 && CurrentMacroIndex < ModuleConfig.ExtendMacroLists.Count)
+            {
+                var macro = ModuleConfig.ExtendMacroLists[CurrentMacroIndex];
+                initialIsLoopEnabled = macro.IsLoopEnabled;
+                initialLoopCount = macro.LoopCount;
+                initialInterval = macro.DefaultInterval;
+            }
 
-        var MainContainerNode = new ResNode
-        {
-            Position = ContentStartPosition,
-            Size = ContentSize,
-            IsVisible = true,
-        };
-        MainContainerNode.AttachNode(this);
+            var mainContainerNode = new ResNode
+            {
+                Position = ContentStartPosition,
+                Size = ContentSize,
+                IsVisible = true,
+            };
+            mainContainerNode.AttachNode(this);
 
-        var TitleNode = new TextNode
-        {
-            IsVisible = true,
-            Size = new(280, 20),
-            Position = new(10f, 0f),
-            SeString = "循环设置",
-            FontSize = 16,
-            AlignmentType = AlignmentType.Left,
-            TextColor = KnownColor.White.Vector(),
-        };
-        TitleNode.AttachNode(MainContainerNode);
+            var titleNode = new TextNode
+            {
+                IsVisible = true,
+                Size = new(280, 20),
+                Position = new(10f, 0f),
+                SeString = "循环设置",
+                FontSize = 16,
+                AlignmentType = AlignmentType.Left,
+                TextColor = KnownColor.White.Vector(),
+            };
+            titleNode.AttachNode(mainContainerNode);
 
         LoopCheckbox = new CheckboxNode
         {
@@ -83,8 +83,8 @@ public unsafe partial class MacroOptimization
 
                 ModuleConfig.Save(Instance);
             }
-        };
-        LoopCheckbox.AttachNode(MainContainerNode);
+            };
+            LoopCheckbox.AttachNode(mainContainerNode);
 
         LoopCountLabel = new TextNode
         {
@@ -95,8 +95,8 @@ public unsafe partial class MacroOptimization
             FontSize = 14,
             AlignmentType = AlignmentType.Left,
             Alpha = initialIsLoopEnabled ? 1.0f : 0.5f,
-        };
-        LoopCountLabel.AttachNode(MainContainerNode);
+            };
+            LoopCountLabel.AttachNode(mainContainerNode);
 
         LoopCountInputNode = new NumericInputNode
         {
@@ -130,7 +130,7 @@ public unsafe partial class MacroOptimization
             else
                 collisionNode->NodeFlags &= ~(NodeFlags.RespondToMouse | NodeFlags.Focusable);
         }
-        LoopCountInputNode.AttachNode(MainContainerNode);
+            LoopCountInputNode.AttachNode(mainContainerNode);
 
         LoopHintNode = new TextNode
         {
@@ -142,34 +142,33 @@ public unsafe partial class MacroOptimization
             AlignmentType = AlignmentType.Left,
             TextColor = KnownColor.Gray.Vector(),
             Alpha = initialIsLoopEnabled ? 1.0f : 0.5f,
-        };
-        LoopHintNode.AttachNode(MainContainerNode);
+            };
+            LoopHintNode.AttachNode(mainContainerNode);
 
-        var IntervalTitleNode = new TextNode
-        {
-            IsVisible = true,
-            Size = new(280, 20),
-            Position = new(10f, 100f),
-            SeString = "默认间隔设置",
-            FontSize = 16,
-            AlignmentType = AlignmentType.Left,
-            TextColor = KnownColor.White.Vector(),
-        };
-        IntervalTitleNode.AttachNode(MainContainerNode);
+            var intervalTitleNode = new TextNode
+            {
+                IsVisible = true,
+                Size = new(280, 20),
+                Position = new(10f, 100f),
+                SeString = "默认间隔设置",
+                FontSize = 16,
+                AlignmentType = AlignmentType.Left,
+                TextColor = KnownColor.White.Vector(),
+            };
+            intervalTitleNode.AttachNode(mainContainerNode);
 
-        var ViewCooldownButton = new TextureButtonNode
-        {
-            IsVisible = true,
-            Size = new(20, 20),
-            Position = new(110f, 100f),
-            TexturePath = "ui/uld/CircleButtons_hr1.tex",
-            TextureCoordinates = new(0, 28),
-            TextureSize = new(28, 28),
-            TextTooltip = "查看录制的冷却时间",
-            OnClick = () => MacroCooldownViewerAddon?.Toggle()
-
-        };
-        ViewCooldownButton.AttachNode(MainContainerNode);
+            var viewCooldownButton = new TextureButtonNode
+            {
+                IsVisible = true,
+                Size = new(20, 20),
+                Position = new(110f, 100f),
+                TexturePath = "ui/uld/CircleButtons_hr1.tex",
+                TextureCoordinates = new(0, 28),
+                TextureSize = new(28, 28),
+                TextTooltip = "查看录制的冷却时间",
+                OnClick = () => MacroCooldownViewerAddon?.Toggle()
+            };
+            viewCooldownButton.AttachNode(mainContainerNode);
 
         IntervalLabel = new TextNode
         {
@@ -179,8 +178,8 @@ public unsafe partial class MacroOptimization
             SeString = "间隔(毫秒):",
             FontSize = 14,
             AlignmentType = AlignmentType.Left,
-        };
-        IntervalLabel.AttachNode(MainContainerNode);
+            };
+            IntervalLabel.AttachNode(mainContainerNode);
 
         IntervalInputNode = new NumericInputNode
         {
@@ -199,22 +198,22 @@ public unsafe partial class MacroOptimization
                     ModuleConfig.Save(Instance);
                 }
             }
-        };
-        IntervalInputNode.AttachNode(MainContainerNode);
+            };
+            IntervalInputNode.AttachNode(mainContainerNode);
 
-        var IntervalHintNode = new TextNode
-        {
-            IsVisible = true,
-            Size = new(260f, 32f),
-            Position = new(20f, 140f),
-            SeString = "提示: 只对未设置<wait>后缀\n且未被录制过的动作或情感动作、发言等起效",
-            FontSize = 12,
-            AlignmentType = AlignmentType.Left,
-            TextFlags = TextFlags.MultiLine,
-            LineSpacing = 14,
-            TextColor = KnownColor.Gray.Vector(),
-        };
-        IntervalHintNode.AttachNode(MainContainerNode);
+            var intervalHintNode = new TextNode
+            {
+                IsVisible = true,
+                Size = new(260f, 32f),
+                Position = new(20f, 140f),
+                SeString = "提示: 只对未设置<wait>后缀\n且未被录制过的动作或情感动作、发言等起效",
+                FontSize = 12,
+                AlignmentType = AlignmentType.Left,
+                TextFlags = TextFlags.MultiLine,
+                LineSpacing = 14,
+                TextColor = KnownColor.Gray.Vector(),
+            };
+            intervalHintNode.AttachNode(mainContainerNode);
 
         CompletionDelayLabel = new TextNode
         {
@@ -224,8 +223,8 @@ public unsafe partial class MacroOptimization
             SeString = "完成后延迟(毫秒):",
             FontSize = 14,
             AlignmentType = AlignmentType.Left
-        };
-        CompletionDelayLabel.AttachNode(MainContainerNode);
+            };
+            CompletionDelayLabel.AttachNode(mainContainerNode);
 
         var initialCompletionDelay = CurrentMacroIndex >= 0 && CurrentMacroIndex < ModuleConfig.ExtendMacroLists.Count
             ? ModuleConfig.ExtendMacroLists[CurrentMacroIndex].CompletionDelay
@@ -248,10 +247,10 @@ public unsafe partial class MacroOptimization
                     ModuleConfig.Save(Instance);
                 }
             }
-        };
-        CompletionDelayInputNode.AttachNode(MainContainerNode);
+            };
+            CompletionDelayInputNode.AttachNode(mainContainerNode);
 
-        var CompletionDelayHintNode = new TextNode
+            var completionDelayHintNode = new TextNode
         {
             IsVisible = true,
             Size = new(260f, 32f),
@@ -263,8 +262,8 @@ public unsafe partial class MacroOptimization
             LineSpacing = 14,
             TextColor = KnownColor.Gray.Vector(),
         };
-        CompletionDelayHintNode.AttachNode(MainContainerNode);
-    }
+            completionDelayHintNode.AttachNode(mainContainerNode);
+        }
 
     public void OpenWithMacroIndex(int macroIndex)
     {

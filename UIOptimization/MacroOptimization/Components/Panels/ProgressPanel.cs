@@ -14,38 +14,38 @@ using static DailyRoutines.ModulesPublic.MacroOptimization;
 
 internal sealed class ProgressPanel : ResNode // 宏进度面板
 {
-    private class ProgressRow
+    private sealed class ProgressRow
     {
-        public SimpleComponentNode?    CompNode;
-        public SimpleNineGridNode?     BackgroundNode;
-        public IconNode?               SimpleIconNode; // 用于echo/wait/emote
-        public DragDropNode?           DragDropIconNode; // 用于action
-        public TextNode?               NameNode;
-        public TextNode?               ConditionStatusNode; // 用于显示条件判断状态
-        public TextNode?               TargetStatusNode; // 用于显示目标判断状态
-        public TextNode?               CounterNode;
+        public SimpleComponentNode? CompNode;
+        public SimpleNineGridNode?  BackgroundNode;
+        public IconNode?            SimpleIconNode; // 用于 echo/wait/emote
+        public DragDropNode?        DragDropIconNode; // 用于 action
+        public TextNode?            NameNode;
+        public TextNode?            ConditionStatusNode; // 用于显示条件判断状态
+        public TextNode?            TargetStatusNode; // 用于显示目标判断状态
+        public TextNode?            CounterNode;
         public ProgressBarCastNode? ProgressBarNode;
     }
 
     private readonly MacroConfig ModuleConfig;
 
-    private readonly List<ProgressBarCastNode> ProgressBarNodes        = [];
-    private readonly List<SimpleNineGridNode>     ProgressBackgroundNodes = [];
-    private readonly List<ProgressRow>            ProgressRows            = [];
+    private readonly List<ProgressBarCastNode> ProgressBarNodes = [];
+    private readonly List<SimpleNineGridNode>  ProgressBackgroundNodes = [];
+    private readonly List<ProgressRow>         ProgressRows = [];
 
-    private List<uint>   ParsedMacroActionIDs      = [];
-    private List<string> ParsedCommandTypes        = [];
-    private List<bool>   ParsedHasTargetFlags      = [];
-    private List<int>    SkippedProgressBarIndices = [];
+    private List<uint>           ParsedMacroActionIDs = [];
+    private List<string>         ParsedCommandTypes = [];
+    private List<bool>           ParsedHasTargetFlags = [];
+    private readonly HashSet<int> SkippedProgressIndices = [];
 
     private ScrollingAreaNode<SimpleComponentNode>? ProgressVerticalListNode;
-    private ProgressBarCastNode?                 OverallProgressBarNode;
+    private ProgressBarCastNode?                    OverallProgressBarNode;
     private TextNode?                               OverallProgressTextNode;
 
     private const int RowsPerFrame = 2;
-    private bool IsInitializingRows = false;
-    private bool IsDisposed = false;
-    private int DesiredRowCount = 0;
+    private bool IsInitializingRows;
+    private bool IsDisposed;
+    private int  DesiredRowCount;
     private int MaxMacroLines = 255; // 最大宏行数 最大只有255行
 
     public ProgressPanel(MacroConfig config, int maxMacroLines = 255)
@@ -82,10 +82,10 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         };
         OverallProgressBarNode.AttachNode(this);
 
-        
+
         var scrollAreaY = 26f; // 计算滚动区域大小：使用 ProgressPanel 的 Size 减去顶部占用的空间
         var scrollHeight = Size.Y - scrollAreaY; // 从起始位置到底部的高度
-        var scrollWidth = Size.X - 22f;  // 留出右边距
+        var scrollWidth = Size.X - 22f; // 留出右边距
 
         ProgressVerticalListNode = new ScrollingAreaNode<SimpleComponentNode>
         {
@@ -150,7 +150,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         StopProgressiveCreation();
     }
 
-    public void SetMacroLines(List<uint> macroLines, List<string> commandTypes = null, List<bool> hasTargetFlags = null)
+    public void SetMacroLines(List<uint> macroLines, List<string>? commandTypes = null, List<bool>? hasTargetFlags = null)
     {
         ParsedMacroActionIDs = macroLines;
         ParsedCommandTypes = commandTypes ?? [];
@@ -239,7 +239,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
                 UpdateRow(i, actionID, commandType, hasTarget, true);
             }
             else
-                UpdateRow(i, 0, "", false, true);
+                UpdateRow(i, 0, string.Empty, false, true);
         }
 
         if (LastVisibleRowCount > availableRowCount)
@@ -297,7 +297,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         row.NameNode = new TextNode
         {
             IsVisible = true,
-            SeString = "",
+            SeString = string.Empty,
             FontSize = 16,
             TextFlags = TextFlags.AutoAdjustNodeSize,
             Position = new(50f, 5f)
@@ -308,7 +308,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         row.ConditionStatusNode = new TextNode
         {
             IsVisible = false,
-            SeString = "",
+            SeString = string.Empty,
             FontSize = 10,
             TextFlags = TextFlags.AutoAdjustNodeSize,
             AlignmentType = AlignmentType.Center,
@@ -320,7 +320,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         row.TargetStatusNode = new TextNode
         {
             IsVisible = false,
-            SeString = "",
+            SeString = string.Empty,
             FontSize = 10,
             TextFlags = TextFlags.AutoAdjustNodeSize,
             AlignmentType = AlignmentType.Center,
@@ -331,7 +331,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         row.CounterNode = new TextNode
         {
             IsVisible = true,
-            SeString = "",
+            SeString = string.Empty,
             FontSize = 10,
             Position = new Vector2(143, 5),
             Size = new Vector2(50, 20),
@@ -375,8 +375,8 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
             row.SimpleIconNode.IconId = 0;
             row.SimpleIconNode.Size = new(45);
             row.DragDropIconNode.IsVisible = false;
-            row.NameNode.SeString = "";
-            row.CounterNode.SeString = "";
+            row.NameNode.SeString = string.Empty;
+            row.CounterNode.SeString = string.Empty;
             row.ConditionStatusNode.IsVisible = false;
             row.TargetStatusNode.IsVisible = false;
             row.ProgressBarNode.BackgroundColor = KnownColor.Transparent.Vector();
@@ -469,7 +469,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
             row.DragDropIconNode.Payload = new()
             {
                 Type = isCraftAction ? DragDropType.CraftingAction : DragDropType.Action,
-                Int2 = (int)actionID    ,
+                Int2 = (int)actionID,
             };
             row.DragDropIconNode.OnRollOver = node => node.ShowTooltip(AtkTooltipManager.AtkTooltipType.Action, isCraftAction ? ActionKind.CraftingAction : ActionKind.Action);
             row.DragDropIconNode.OnRollOut = node => node.HideTooltip();
@@ -531,7 +531,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
     {
         if (progressIndex >= 0 && progressIndex < ProgressBarNodes.Count)
         {
-            SkippedProgressBarIndices.Add(progressIndex);
+            SkippedProgressIndices.Add(progressIndex);
             ProgressBarNodes[progressIndex].BarColor = KnownColor.Red.Vector();
         }
     }
@@ -554,9 +554,9 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         }
     }
 
-    public void ClearSkippedStates() => SkippedProgressBarIndices.Clear();
+    public void ClearSkippedStates() => SkippedProgressIndices.Clear();
 
-    public bool IsProgressSkipped(int progressIndex) => SkippedProgressBarIndices.Contains(progressIndex);
+    public bool IsProgressSkipped(int progressIndex) => SkippedProgressIndices.Contains(progressIndex);
 
     public void SetCurrentProgress(int progressIndex)
     {
@@ -565,14 +565,14 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
             if (i < progressIndex)
             {
                 ProgressBarNodes[i].Progress = 1f;
-                if (!SkippedProgressBarIndices.Contains(i))
+                if (!SkippedProgressIndices.Contains(i))
                     ProgressBarNodes[i].BarColor = KnownColor.Green.Vector();
 
                 ProgressBackgroundNodes[i].IsVisible = false;
             }
             else if (i == progressIndex)
             {
-                if (!SkippedProgressBarIndices.Contains(i))
+                if (!SkippedProgressIndices.Contains(i))
                     ProgressBarNodes[i].BarColor = KnownColor.Yellow.Vector();
                 ProgressBackgroundNodes[i].IsVisible = true;
             }
@@ -643,7 +643,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
             }
         }
 
-        SkippedProgressBarIndices.Clear(); // 重置时清空跳过状态
+        SkippedProgressIndices.Clear(); // 重置时清空跳过状态
 
         OverallProgressBarNode.Progress = 1f;
         OverallProgressBarNode.BarColor = KnownColor.White.Vector();

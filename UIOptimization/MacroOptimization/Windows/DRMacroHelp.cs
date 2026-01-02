@@ -9,182 +9,182 @@ namespace DailyRoutines.ModulesPublic;
 
 public unsafe partial class MacroOptimization
 {
-    internal class DRMacroHelp : NativeAddon
+    internal sealed class DRMacroHelp : NativeAddon
     {
-    private readonly record struct HelpRow(string Syntax, string Description, string Example);
+        private readonly record struct HelpRow(string Syntax, string Description, string Example);
 
-    private sealed class HelpTableHeaderNode : ResNode
-    {
-        private readonly TextNode syntax;
-        private readonly TextNode desc;
-        private readonly TextNode ex;
-
-        public HelpTableHeaderNode()
+        private sealed class HelpTableHeaderNode : ResNode
         {
-            IsVisible = true;
+            private readonly TextNode SyntaxNode;
+            private readonly TextNode DescriptionNode;
+            private readonly TextNode ExampleNode;
 
-            syntax = new TextNode
+            public HelpTableHeaderNode()
             {
-                IsVisible = true,
-                Position = new(0, 0),
-                String = "语法",
-                FontSize = 13,
-                AlignmentType = AlignmentType.Left,
-                TextColor = KnownColor.Orange.Vector(),
-            };
-            syntax.AttachNode(this);
+                IsVisible = true;
 
-            desc = new TextNode
-            {
-                IsVisible = true,
-                String = "说明",
-                FontSize = 13,
-                AlignmentType = AlignmentType.Left,
-                TextColor = KnownColor.Orange.Vector(),
-            };
-            desc.AttachNode(this);
-
-            ex = new TextNode
-            {
-                IsVisible = true,
-                String = "示例",
-                FontSize = 13,
-                AlignmentType = AlignmentType.Left,
-                TextColor = KnownColor.Orange.Vector(),
-            };
-            ex.AttachNode(this);
-
-            Size = new(1, 24);
-        }
-
-        protected override void OnSizeChanged()
-        {
-            base.OnSizeChanged();
-
-            var width = Width;
-            var available = MathF.Max(1, width - 12);
-            var col1 = MathF.Round(available * 0.25f);
-            var col2 = MathF.Round(available * 0.45f);
-            var col3 = MathF.Max(1, available - col1 - col2);
-
-            syntax.Size = new(col1, Height);
-            desc.Position = new(col1 + 6, 0);
-            desc.Size = new(col2, Height);
-            ex.Position = new(col1 + col2 + 12, 0);
-            ex.Size = new(col3, Height);
-        }
-    }
-
-    private sealed class HelpTableRowNode : ResNode
-    {
-        private readonly string exampleText;
-        private readonly TextNode syntax;
-        private readonly TextNode desc;
-        private readonly TextNode ex;
-
-        public HelpTableRowNode(HelpRow rowData)
-        {
-            IsVisible = true;
-            exampleText = rowData.Example;
-
-            syntax = new TextNode
-            {
-                IsVisible = true,
-                Position = new(0, 0),
-                String = rowData.Syntax,
-                FontSize = 13,
-                AlignmentType = AlignmentType.Left,
-                TextFlags = TextFlags.MultiLine,
-                LineSpacing = 14,
-                TextColor = KnownColor.LightBlue.Vector(),
-            };
-            syntax.AttachNode(this);
-
-            desc = new TextNode
-            {
-                IsVisible = true,
-                String = rowData.Description,
-                FontSize = 12,
-                AlignmentType = AlignmentType.Left,
-                TextFlags = TextFlags.MultiLine,
-                LineSpacing = 14,
-                TextColor = KnownColor.Gray.Vector(),
-            };
-            desc.AttachNode(this);
-
-            ex = new TextNode
-            {
-                IsVisible = true,
-                String = rowData.Example,
-                FontSize = 12,
-                AlignmentType = AlignmentType.Left,
-                TextFlags = TextFlags.MultiLine,
-                LineSpacing = 14,
-                TextColor = KnownColor.Yellow.Vector(),
-            };
-            ex.AttachNode(this);
-
-            ex.AddEvent(AtkEventType.MouseOver, () =>
-            {
-                ex.TextColor = KnownColor.Orange.Vector();
-            });
-
-            ex.AddEvent(AtkEventType.MouseOut, () =>
-            {
-                ex.TextColor = KnownColor.Yellow.Vector();
-            });
-
-            ex.ShowClickableCursor = true;
-            ex.AddEvent(AtkEventType.MouseClick, () =>
-            {
-                if (!string.IsNullOrWhiteSpace(exampleText))
+                SyntaxNode = new TextNode
                 {
-                    try
-                    {
-                        Clipboard.SetText(exampleText);
-                        NotificationSuccess(Lang.Get("CopiedToClipboard"));
-                    }
-                    catch
-                    {
-                        // ignored
-                    }
-                }
-            });
+                    IsVisible = true,
+                    Position = new(0, 0),
+                    String = "语法",
+                    FontSize = 13,
+                    AlignmentType = AlignmentType.Left,
+                    TextColor = KnownColor.Orange.Vector(),
+                };
+                SyntaxNode.AttachNode(this);
 
-            Size = new(1, 58);
+                DescriptionNode = new TextNode
+                {
+                    IsVisible = true,
+                    String = "说明",
+                    FontSize = 13,
+                    AlignmentType = AlignmentType.Left,
+                    TextColor = KnownColor.Orange.Vector(),
+                };
+                DescriptionNode.AttachNode(this);
+
+                ExampleNode = new TextNode
+                {
+                    IsVisible = true,
+                    String = "示例",
+                    FontSize = 13,
+                    AlignmentType = AlignmentType.Left,
+                    TextColor = KnownColor.Orange.Vector(),
+                };
+                ExampleNode.AttachNode(this);
+
+                Size = new(1, 24);
+            }
+
+            protected override void OnSizeChanged()
+            {
+                base.OnSizeChanged();
+
+                var width = Width;
+                var available = MathF.Max(1, width - 12);
+                var col1 = MathF.Round(available * 0.25f);
+                var col2 = MathF.Round(available * 0.45f);
+                var col3 = MathF.Max(1, available - col1 - col2);
+
+                SyntaxNode.Size = new(col1, Height);
+                DescriptionNode.Position = new(col1 + 6, 0);
+                DescriptionNode.Size = new(col2, Height);
+                ExampleNode.Position = new(col1 + col2 + 12, 0);
+                ExampleNode.Size = new(col3, Height);
+            }
         }
 
-        protected override void OnSizeChanged()
+        private sealed class HelpTableRowNode : ResNode
         {
-            base.OnSizeChanged();
+            private readonly string ExampleText;
+            private readonly TextNode SyntaxNode;
+            private readonly TextNode DescriptionNode;
+            private readonly TextNode ExampleNode;
 
-            var width = Width;
-            var available = MathF.Max(1, width - 12);
-            var col1 = MathF.Round(available * 0.25f);
-            var col2 = MathF.Round(available * 0.45f);
-            var col3 = MathF.Max(1, available - col1 - col2);
+            public HelpTableRowNode(HelpRow rowData)
+            {
+                IsVisible = true;
+                ExampleText = rowData.Example;
 
-            syntax.Size = new(col1, Height);
-            desc.Position = new(col1 + 6, 0);
-            desc.Size = new(col2, Height);
-            ex.Position = new(col1 + col2 + 12, 0);
-            ex.Size = new(col3, Height);
+                SyntaxNode = new TextNode
+                {
+                    IsVisible = true,
+                    Position = new(0, 0),
+                    String = rowData.Syntax,
+                    FontSize = 13,
+                    AlignmentType = AlignmentType.Left,
+                    TextFlags = TextFlags.MultiLine,
+                    LineSpacing = 14,
+                    TextColor = KnownColor.LightBlue.Vector(),
+                };
+                SyntaxNode.AttachNode(this);
+
+                DescriptionNode = new TextNode
+                {
+                    IsVisible = true,
+                    String = rowData.Description,
+                    FontSize = 12,
+                    AlignmentType = AlignmentType.Left,
+                    TextFlags = TextFlags.MultiLine,
+                    LineSpacing = 14,
+                    TextColor = KnownColor.Gray.Vector(),
+                };
+                DescriptionNode.AttachNode(this);
+
+                ExampleNode = new TextNode
+                {
+                    IsVisible = true,
+                    String = rowData.Example,
+                    FontSize = 12,
+                    AlignmentType = AlignmentType.Left,
+                    TextFlags = TextFlags.MultiLine,
+                    LineSpacing = 14,
+                    TextColor = KnownColor.Yellow.Vector(),
+                };
+                ExampleNode.AttachNode(this);
+
+                ExampleNode.AddEvent(AtkEventType.MouseOver, () =>
+                {
+                    ExampleNode.TextColor = KnownColor.Orange.Vector();
+                });
+
+                ExampleNode.AddEvent(AtkEventType.MouseOut, () =>
+                {
+                    ExampleNode.TextColor = KnownColor.Yellow.Vector();
+                });
+
+                ExampleNode.ShowClickableCursor = true;
+                ExampleNode.AddEvent(AtkEventType.MouseClick, () =>
+                {
+                    if (!string.IsNullOrWhiteSpace(ExampleText))
+                    {
+                        try
+                        {
+                            Clipboard.SetText(ExampleText);
+                            NotificationSuccess(Lang.Get("CopiedToClipboard"));
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
+                    }
+                });
+
+                Size = new(1, 58);
+            }
+
+            protected override void OnSizeChanged()
+            {
+                base.OnSizeChanged();
+
+                var width = Width;
+                var available = MathF.Max(1, width - 12);
+                var col1 = MathF.Round(available * 0.25f);
+                var col2 = MathF.Round(available * 0.45f);
+                var col3 = MathF.Max(1, available - col1 - col2);
+
+                SyntaxNode.Size = new(col1, Height);
+                DescriptionNode.Position = new(col1 + 6, 0);
+                DescriptionNode.Size = new(col2, Height);
+                ExampleNode.Position = new(col1 + col2 + 12, 0);
+                ExampleNode.Size = new(col3, Height);
+            }
         }
-    }
 
-    private string helpFilter = string.Empty;
-    private bool applyFilterScheduled;
+        private string HelpFilter = string.Empty;
+        private bool   ApplyFilterScheduled;
 
-    private TextInputNode? filterInputNode;
-    private ScrollingAreaNode<TreeListNode>? scrollingArea;
+        private TextInputNode? FilterInputNode;
+        private ScrollingAreaNode<TreeListNode>? ScrollingArea;
 
-    private TreeListCategoryNode? targetsCategory;
-    private TreeListCategoryNode? ifCategory;
-    private TreeListCategoryNode? extraCategory;
+        private TreeListCategoryNode? TargetsCategory;
+        private TreeListCategoryNode? IfCategory;
+        private TreeListCategoryNode? ExtraCategory;
 
-    private readonly List<(HelpRow Row, ResNode Node)> targetRowNodes = [];
-    private readonly List<(HelpRow Row, ResNode Node)> ifRowNodes = [];
-    private readonly List<(HelpRow Row, ResNode Node)> extraRowNodes = [];
+        private readonly List<(HelpRow Row, ResNode Node)> TargetRowNodes = [];
+        private readonly List<(HelpRow Row, ResNode Node)> IfRowNodes = [];
+        private readonly List<(HelpRow Row, ResNode Node)> ExtraRowNodes = [];
 
     protected override void OnSetup(AtkUnitBase* addon)
     {
@@ -196,7 +196,7 @@ public unsafe partial class MacroOptimization
         };
         mainContainer.AttachNode(this);
 
-        filterInputNode = new TextInputNode
+        FilterInputNode = new TextInputNode
         {
             IsVisible = true,
             Position = new(10, 8),
@@ -204,13 +204,13 @@ public unsafe partial class MacroOptimization
             PlaceholderString = "输入关键字过滤（例如 party / enemy / buff / hp / toTop）",
             OnInputReceived = input =>
             {
-                helpFilter = input.ExtractText();
+                HelpFilter = input.ExtractText();
                 ScheduleApplyFilter();
             }
         };
-        filterInputNode.AttachNode(mainContainer);
+        FilterInputNode.AttachNode(mainContainer);
 
-        scrollingArea = new ScrollingAreaNode<TreeListNode>
+        ScrollingArea = new ScrollingAreaNode<TreeListNode>
         {
             IsVisible = true,
             Position = new(10, 34),
@@ -219,10 +219,10 @@ public unsafe partial class MacroOptimization
             ScrollSpeed = 20,
             AutoHideScrollBar = false,
         };
-        scrollingArea.AttachNode(mainContainer);
+        ScrollingArea.AttachNode(mainContainer);
 
-        scrollingArea.ContentNode.OnLayoutUpdate = newHeight =>
-            scrollingArea.ContentHeight = Math.Max(10f, newHeight + 10f);
+        ScrollingArea.ContentNode.OnLayoutUpdate = newHeight =>
+            ScrollingArea.ContentHeight = Math.Max(10f, newHeight + 10f);
 
         BuildTree();
         ApplyFilter();
@@ -230,68 +230,68 @@ public unsafe partial class MacroOptimization
 
     private void BuildTree()
     {
-        if (scrollingArea == null)
+        if (ScrollingArea == null)
             return;
 
-        var root = scrollingArea.ContentNode;
+        var root = ScrollingArea.ContentNode;
 
-        targetsCategory = new TreeListCategoryNode
+        TargetsCategory = new TreeListCategoryNode
         {
             IsVisible = true,
             IsCollapsed = false,
             String = "目标占位符（智能目标）",
         };
-        root.AddCategoryNode(targetsCategory);
+        root.AddCategoryNode(TargetsCategory);
 
-        AddTableHeader(targetsCategory);
+        AddTableHeader(TargetsCategory);
         foreach (var row in TargetHelpRows)
-            targetRowNodes.Add((row, AddHelpRow(targetsCategory, row)));
+            TargetRowNodes.Add((row, AddHelpRow(TargetsCategory, row)));
 
-        ifCategory = new TreeListCategoryNode
+        IfCategory = new TreeListCategoryNode
         {
             IsVisible = true,
             IsCollapsed = false,
             String = "/if 条件语法",
         };
-        root.AddCategoryNode(ifCategory);
+        root.AddCategoryNode(IfCategory);
 
-        AddTableHeader(ifCategory);
+        AddTableHeader(IfCategory);
         foreach (var row in IfHelpRows)
-            ifRowNodes.Add((row, AddHelpRow(ifCategory, row)));
+            IfRowNodes.Add((row, AddHelpRow(IfCategory, row)));
 
-        extraCategory = new TreeListCategoryNode
+        ExtraCategory = new TreeListCategoryNode
         {
             IsVisible = true,
             IsCollapsed = false,
             String = "扩展命令",
         };
-        root.AddCategoryNode(extraCategory);
+        root.AddCategoryNode(ExtraCategory);
 
-        AddTableHeader(extraCategory);
+        AddTableHeader(ExtraCategory);
         foreach (var row in ExtraCommandRows)
-            extraRowNodes.Add((row, AddHelpRow(extraCategory, row)));
+            ExtraRowNodes.Add((row, AddHelpRow(ExtraCategory, row)));
     }
 
     private void ScheduleApplyFilter()
     {
-        if (applyFilterScheduled)
+        if (ApplyFilterScheduled)
             return;
 
-        applyFilterScheduled = true;
+        ApplyFilterScheduled = true;
         DService.Framework.RunOnTick(() =>
         {
-            applyFilterScheduled = false;
+            ApplyFilterScheduled = false;
             ApplyFilter();
         }, delayTicks: 1);
     }
 
     private void ApplyFilter()
     {
-        UpdateCategoryFilter(targetsCategory, "目标占位符（智能目标）", targetRowNodes);
-        UpdateCategoryFilter(ifCategory, "/if 条件语法", ifRowNodes);
-        UpdateCategoryFilter(extraCategory, "扩展命令", extraRowNodes);
+        UpdateCategoryFilter(TargetsCategory, "目标占位符（智能目标）", TargetRowNodes);
+        UpdateCategoryFilter(IfCategory, "/if 条件语法", IfRowNodes);
+        UpdateCategoryFilter(ExtraCategory, "扩展命令", ExtraRowNodes);
 
-        scrollingArea?.ContentNode.RefreshLayout();
+        ScrollingArea?.ContentNode.RefreshLayout();
     }
 
     private void UpdateCategoryFilter(TreeListCategoryNode? category, string baseTitle, List<(HelpRow Row, ResNode Node)> rows)
@@ -314,7 +314,7 @@ public unsafe partial class MacroOptimization
 
     private bool IsMatchFilter(HelpRow row)
     {
-        var filter = helpFilter;
+        var filter = HelpFilter;
         if (string.IsNullOrWhiteSpace(filter))
             return true;
 

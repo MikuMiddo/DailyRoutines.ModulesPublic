@@ -14,90 +14,89 @@ public unsafe partial class MacroOptimization
 {
     internal sealed class DRMacroExtendDisplay(DailyModuleBase instance, TaskHelper taskHelper, DRMacroSettings macroSettings) : NativeAddon
     {
-    private readonly DailyModuleBase Instance           = instance;
-    private readonly TaskHelper      TaskHelper        = taskHelper;
-    private readonly DRMacroSettings MacroSettingsAddon = macroSettings;
+        private readonly DailyModuleBase ModuleInstance = instance;
+        private readonly TaskHelper      TaskHelperTemplate = taskHelper;
+        private readonly DRMacroSettings MacroSettingsAddon = macroSettings;
 
-    private List<uint>   ParsedMacroActionIDs  = [];
-    private List<string> ParsedCommandTypes    = [];
-    private List<bool>   ParsedHasTargetFlags  = [];
-    private List<string> ExecutingMacroLines   = [];
-    private List<string> RecordedMacroLines    = [];
-    private Dictionary<int, int> MacroLineToProgressIndexMap = [];
+        private List<uint>           ParsedMacroActionIDs = [];
+        private List<string>         ParsedCommandTypes = [];
+        private List<bool>           ParsedHasTargetFlags = [];
+        private List<string>         ExecutingMacroLines = [];
+        private Dictionary<int, int> MacroLineToProgressIndexMap = [];
 
-    private ResNode?       MainContainerNode;
-    private ListPanel?     ListPanel;
-    private InfoPanel?     InfoPanel;
-    private ProgressPanel? ProgressPanel;
+        private ResNode?       MainContainerNode;
+        private ListPanel?     MacroListPanel;
+        private InfoPanel?     MacroInfoPanel;
+        private ProgressPanel? MacroProgressPanel;
 
-    private string MacroContentBuffer = "";
-    private string LastMiconContent   = "";
+        private string MacroContentBuffer = string.Empty;
+        private string LastMiconContent = string.Empty;
 
-    private int SelectedMacroIndex = 0;
-    private int TotalLoopCount     = 1;
+        private int  SelectedMacroIndex;
+        private int  TotalLoopCount = 1;
+        private uint LastClassJobID;
 
-    private uint LastClassJobID = 0;
+        private MacroExecutor? MacroExecutorInstance;
+        private TaskHelper?    TaskHelperInstance;
 
-    private MacroExecutor? MacroExecutorInstance = null;
-    private TaskHelper?    TaskHelperInstance    = null;
+        public bool IsRecording { get; private set; }
 
-    public bool IsRecording { get; private set; } = false;
-    protected override void OnSetup(AtkUnitBase* addon)
-    {
-        MainContainerNode = new ResNode
+        protected override void OnSetup(AtkUnitBase* addon)
         {
-            Position = ContentStartPosition,
-            Size = ContentSize,
-            IsVisible = true,
-        };
-        MainContainerNode.AttachNode(this);
+            MainContainerNode = new ResNode
+            {
+                Position = ContentStartPosition,
+                Size = ContentSize,
+                IsVisible = true,
+            };
+            MainContainerNode.AttachNode(this);
 
-        ListPanel = new ListPanel(ModuleConfig, Instance);
-        InfoPanel = new InfoPanel(ModuleConfig, Instance);
-        ProgressPanel = new ProgressPanel(ModuleConfig);
+            MacroListPanel = new ListPanel(ModuleConfig, ModuleInstance);
+            MacroInfoPanel = new InfoPanel(ModuleConfig, ModuleInstance);
+            MacroProgressPanel = new ProgressPanel(ModuleConfig);
 
-        ListPanel.AttachNode(MainContainerNode);
-        InfoPanel.AttachNode(MainContainerNode);
-        ProgressPanel.AttachNode(MainContainerNode);
+            MacroListPanel.AttachNode(MainContainerNode);
+            MacroInfoPanel.AttachNode(MainContainerNode);
+            MacroProgressPanel.AttachNode(MainContainerNode);
 
-        ListPanel.Build();
-        InfoPanel.Build();
-        ProgressPanel.Build();
+            MacroListPanel.Build();
+            MacroInfoPanel.Build();
+            MacroProgressPanel.Build();
 
-        ListPanel.OnMacroSelected = HandleMacroSelected;
-        ListPanel.OnAddNewMacro = HandleAddNewMacro;
+            MacroListPanel.OnMacroSelected = HandleMacroSelected;
+            MacroListPanel.OnAddNewMacro = HandleAddNewMacro;
 
-        InfoPanel.OnExecuteMacro = HandleExecuteMacro;
-        InfoPanel.OnStopMacro = HandleStopMacro;
-        InfoPanel.OnPauseMacro = HandlePauseMacro;
-        InfoPanel.OnDeleteMacro = HandleDeleteMacro;
-        InfoPanel.OnMacroContentChanged = HandleMacroContentChanged;
-        InfoPanel.OnOpenMacroSettings = MacroSettingsAddon.OpenWithMacroIndex;
-        InfoPanel.OnToggleRecording = HandleToggleRecording;
-        InfoPanel.OnMacroNameChanged = new Action<int, string>((index, name) =>
-        {
-            ListPanel.UpdateMacroDisplay(index, name: name);
-            ListPanel.SetHasUnmodifiedNewMacro(false);
-        });
-        InfoPanel.OnMacroDescriptionChanged = new Action<int, string>((index, desc) =>
-        {
-            ListPanel.UpdateMacroDisplay(index, description: desc);
-            ListPanel.SetHasUnmodifiedNewMacro(false);
-        });
-        InfoPanel.OnMacroIconChanged = new Action<int, uint>((index, iconID) =>
-        {
-            ListPanel.UpdateMacroDisplay(index, iconID: iconID);
-            ListPanel.SetHasUnmodifiedNewMacro(false);
-        });
+            MacroInfoPanel.OnExecuteMacro = HandleExecuteMacro;
+            MacroInfoPanel.OnStopMacro = HandleStopMacro;
+            MacroInfoPanel.OnPauseMacro = HandlePauseMacro;
+            MacroInfoPanel.OnDeleteMacro = HandleDeleteMacro;
+            MacroInfoPanel.OnMacroContentChanged = HandleMacroContentChanged;
+            MacroInfoPanel.OnOpenMacroSettings = MacroSettingsAddon.OpenWithMacroIndex;
+            MacroInfoPanel.OnToggleRecording = HandleToggleRecording;
+            MacroInfoPanel.OnMacroNameChanged = (index, name) =>
+            {
+                MacroListPanel.UpdateMacroDisplay(index, name: name);
+                MacroListPanel.SetHasUnmodifiedNewMacro(false);
+            };
+            MacroInfoPanel.OnMacroDescriptionChanged = (index, desc) =>
+            {
+                MacroListPanel.UpdateMacroDisplay(index, description: desc);
+                MacroListPanel.SetHasUnmodifiedNewMacro(false);
+            };
+            MacroInfoPanel.OnMacroIconChanged = (index, iconID) =>
+            {
+                MacroListPanel.UpdateMacroDisplay(index, iconID: iconID);
+                MacroListPanel.SetHasUnmodifiedNewMacro(false);
+            };
 
-        DService.Framework.Update += ProgressBarUpdate;
+            DService.Framework.Update += ProgressBarUpdate;
 
-        if (ModuleConfig.ExtendMacroLists.Count > 0) // 初始化选择第一个宏
-        {
-            ListPanel.SelectMacro(0);
-            HandleMacroSelected(0);
+            if (ModuleConfig.ExtendMacroLists.Count > 0) // 初始化选择第一个宏
+            {
+                MacroListPanel.SelectMacro(0);
+                HandleMacroSelected(0);
+            }
         }
-    }
 
     private void HandleMacroSelected(int index)
     {
@@ -106,12 +105,12 @@ public unsafe partial class MacroOptimization
 
         UpdateMacroLines();
 
-        InfoPanel.SetMacroIndex(index);
-        InfoPanel.SetTextBuffer(MacroContentBuffer);
-        InfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
-        InfoPanel.RefreshDetailEditNode();
+        MacroInfoPanel.SetMacroIndex(index);
+        MacroInfoPanel.SetTextBuffer(MacroContentBuffer);
+        MacroInfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
+        MacroInfoPanel.RefreshDetailEditNode();
 
-        ProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
+        MacroProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
 
         if (MacroSettingsAddon.IsOpen) // 如果设置窗口打开，同步更新当前宏索引和显示
         {
@@ -130,16 +129,16 @@ public unsafe partial class MacroOptimization
             MacroLines = ""
         };
         ModuleConfig.ExtendMacroLists.Add(newMacro);
-        ListPanel.RefreshMacroList();
-        ListPanel.SelectMacro(ModuleConfig.ExtendMacroLists.Count - 1);
+        MacroListPanel.RefreshMacroList();
+        MacroListPanel.SelectMacro(ModuleConfig.ExtendMacroLists.Count - 1);
         HandleMacroSelected(ModuleConfig.ExtendMacroLists.Count - 1);
-        ListPanel.SetHasUnmodifiedNewMacro(true);
+        MacroListPanel.SetHasUnmodifiedNewMacro(true);
     }
 
     private void HandleExecuteMacro(int macroIndex)
     {
         var currentMacro = ModuleConfig.ExtendMacroLists[macroIndex];
-        var loopCount = InfoPanel.ForceInfiniteLoop ? 0 : (currentMacro.IsLoopEnabled ? currentMacro.LoopCount : 1);
+        var loopCount = MacroInfoPanel.ForceInfiniteLoop ? 0 : (currentMacro.IsLoopEnabled ? currentMacro.LoopCount : 1);
         TotalLoopCount = loopCount;
 
         ExecutingMacroLines = Regex.Split(MacroContentBuffer, "\r\n|\r|\n")
@@ -154,44 +153,44 @@ public unsafe partial class MacroOptimization
             currentMacro.CompletionDelay
         );
 
-        TaskHelperInstance = new TaskHelper();
+        TaskHelperInstance = new() { TimeLimitMS = TaskHelperTemplate.TimeLimitMS };
 
         MacroExecutorInstance.SetDisplayWindow(null); // null 表示主窗口
         MacroExecutorInstance.OnUpdateProgress = (progressIndex, actionID) =>
         {
-            ProgressPanel.SetCurrentProgress(progressIndex);
+            MacroProgressPanel.SetCurrentProgress(progressIndex);
 
             var completedCount = Math.Max(0, progressIndex);
             var totalCount = ParsedMacroActionIDs.Count;
             var overallProgress = (float)completedCount / totalCount;
-            ProgressPanel.UpdateOverallProgress(overallProgress, completedCount);
+            MacroProgressPanel.UpdateOverallProgress(overallProgress, completedCount);
         };
         MacroExecutorInstance.OnSkipLine = (progressIndex) =>
         {
-            ProgressPanel.UpdateProgress(progressIndex, 1f);
-            ProgressPanel.MarkProgressAsSkipped(progressIndex);
+            MacroProgressPanel.UpdateProgress(progressIndex, 1f);
+            MacroProgressPanel.MarkProgressAsSkipped(progressIndex);
 
             var completedCount = Math.Max(0, progressIndex + 1); // +1 因为这一行已经完成(虽然被跳过)
             var totalCount = ParsedMacroActionIDs.Count;
             var overallProgress = (float)completedCount / totalCount;
-            ProgressPanel.UpdateOverallProgress(overallProgress, completedCount);
+            MacroProgressPanel.UpdateOverallProgress(overallProgress, completedCount);
         };
-        MacroExecutorInstance.OnUpdateConditionStatus = ProgressPanel.UpdateConditionStatus;
-        MacroExecutorInstance.OnUpdateTargetStatus = ProgressPanel.UpdateTargetStatus;
+        MacroExecutorInstance.OnUpdateConditionStatus = MacroProgressPanel.UpdateConditionStatus;
+        MacroExecutorInstance.OnUpdateTargetStatus = MacroProgressPanel.UpdateTargetStatus;
         MacroExecutorInstance.OnLoopComplete = () =>
         {
             MacroExecutorInstance.GetCurrentProgressInfo(out var progressIndex, out _, out _); // 先将最后一个进度条设置为绿色（如果未被跳过）
             if (progressIndex >= 0 && progressIndex < ParsedMacroActionIDs.Count)
             {
-                if (!ProgressPanel.IsProgressSkipped(progressIndex)) // 只有未被跳过的进度条才设置为绿色
+                if (!MacroProgressPanel.IsProgressSkipped(progressIndex)) // 只有未被跳过的进度条才设置为绿色
                 {
-                    ProgressPanel.UpdateProgress(progressIndex, 1f);
-                    ProgressPanel.SetProgressColor(progressIndex, KnownColor.Green);
+                    MacroProgressPanel.UpdateProgress(progressIndex, 1f);
+                    MacroProgressPanel.SetProgressColor(progressIndex, KnownColor.Green);
                 }
             }
 
-            ProgressPanel.UpdateOverallProgress(1f, ParsedMacroActionIDs.Count);
-            ProgressPanel.SetOverallProgressColor(KnownColor.Green);
+            MacroProgressPanel.UpdateOverallProgress(1f, ParsedMacroActionIDs.Count);
+            MacroProgressPanel.SetOverallProgressColor(KnownColor.Green);
 
             var currentMacro = ModuleConfig.ExtendMacroLists[SelectedMacroIndex]; // 延迟重置进度条，保持完成状态显示
             var visualDelay = currentMacro.CompletionDelay > 0 ? currentMacro.CompletionDelay : currentMacro.DefaultInterval;
@@ -199,8 +198,8 @@ public unsafe partial class MacroOptimization
             TaskHelperInstance?.DelayNext(visualDelay);
             TaskHelperInstance?.Enqueue(() =>
             {
-                ProgressPanel.ResetProgress();
-                ProgressPanel.SetOverallProgressColor(KnownColor.Green);
+                MacroProgressPanel.ResetProgress();
+                MacroProgressPanel.SetOverallProgressColor(KnownColor.Green);
             });
         };
 
@@ -209,27 +208,27 @@ public unsafe partial class MacroOptimization
             MacroExecutorInstance.GetCurrentProgressInfo(out var progressIndex, out _, out _); // 先将最后一个进度条设置为绿色（如果未被跳过）
             if (progressIndex >= 0 && progressIndex < ParsedMacroActionIDs.Count)
             {
-                if (!ProgressPanel.IsProgressSkipped(progressIndex)) // 只有未被跳过的进度条才设置为绿色
+                if (!MacroProgressPanel.IsProgressSkipped(progressIndex)) // 只有未被跳过的进度条才设置为绿色
                 {
-                    ProgressPanel.UpdateProgress(progressIndex, 1f);
-                    ProgressPanel.SetProgressColor(progressIndex, KnownColor.Green);
+                    MacroProgressPanel.UpdateProgress(progressIndex, 1f);
+                    MacroProgressPanel.SetProgressColor(progressIndex, KnownColor.Green);
                 }
             }
 
-            ProgressPanel.UpdateOverallProgress(1f, ParsedMacroActionIDs.Count);
-            ProgressPanel.SetOverallProgressColor(KnownColor.Green);
+            MacroProgressPanel.UpdateOverallProgress(1f, ParsedMacroActionIDs.Count);
+            MacroProgressPanel.SetOverallProgressColor(KnownColor.Green);
             MacroExecutorInstance?.Stop();
-            InfoPanel.ShowExecuteButton();
+            MacroInfoPanel.ShowExecuteButton();
 
-            ProgressPanel.ResetProgress();
+            MacroProgressPanel.ResetProgress();
         };
 
-        InfoPanel.ShowStopPauseButtons();
+        MacroInfoPanel.ShowStopPauseButtons();
 
         UpdateMacroLines();
-        ProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
-        ProgressPanel.ClearSkippedStates();
-        ProgressPanel.SetOverallProgressColor(KnownColor.Green);
+        MacroProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
+        MacroProgressPanel.ClearSkippedStates();
+        MacroProgressPanel.SetOverallProgressColor(KnownColor.Green);
 
         MacroExecutorInstance.Start();
     }
@@ -241,8 +240,8 @@ public unsafe partial class MacroOptimization
         TaskHelperInstance?.Abort(); // 清理 TaskHelper
         TaskHelperInstance = null;
 
-        ProgressPanel.ResetProgress(); // 重置进度面板并恢复执行按钮显示
-        InfoPanel.ShowExecuteButton();
+        MacroProgressPanel.ResetProgress(); // 重置进度面板并恢复执行按钮显示
+        MacroInfoPanel.ShowExecuteButton();
     }
 
     public void RecordAction(uint actionID)
@@ -255,16 +254,16 @@ public unsafe partial class MacroOptimization
 
         var macroLine = $"/ac {actionName}";
 
-        var currentContent = InfoPanel.GetTextBuffer();
+        var currentContent = MacroInfoPanel.GetTextBuffer();
         var newContent = string.IsNullOrEmpty(currentContent)
             ? macroLine
             : currentContent + "\r" + macroLine;
 
-        InfoPanel.SetTextBuffer(newContent);
+        MacroInfoPanel.SetTextBuffer(newContent);
         MacroContentBuffer = newContent;
 
         ModuleConfig.ExtendMacroLists[SelectedMacroIndex].MacroLines = newContent;
-        ModuleConfig.Save(Instance);
+        ModuleConfig.Save(ModuleInstance);
     }
 
     private void HandlePauseMacro(bool isPaused)
@@ -272,12 +271,12 @@ public unsafe partial class MacroOptimization
         if (isPaused)
         {
             MacroExecutorInstance?.Pause();
-            ProgressPanel.SetOverallProgressColor(KnownColor.Yellow);
+            MacroProgressPanel.SetOverallProgressColor(KnownColor.Yellow);
         }
         else
         {
             MacroExecutorInstance?.Resume();
-            ProgressPanel.SetOverallProgressColor(KnownColor.Green);
+            MacroProgressPanel.SetOverallProgressColor(KnownColor.Green);
         }
     }
 
@@ -286,16 +285,16 @@ public unsafe partial class MacroOptimization
         if (IsRecording)
         {
             IsRecording = false;
-            InfoPanel.SetRecordingState(false);
+            MacroInfoPanel.SetRecordingState(false);
             UpdateMacroLines();
-            InfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
-            InfoPanel.RefreshDetailEditNode();
-            ProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
+            MacroInfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
+            MacroInfoPanel.RefreshDetailEditNode();
+            MacroProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
         }
         else
         {
             IsRecording = true;
-            InfoPanel.SetRecordingState(true);
+            MacroInfoPanel.SetRecordingState(true);
         }
     }
 
@@ -320,8 +319,8 @@ public unsafe partial class MacroOptimization
         if (SelectedMacroIndex >= ModuleConfig.ExtendMacroLists.Count) // 调整索引到有效范围
             SelectedMacroIndex = ModuleConfig.ExtendMacroLists.Count - 1;
 
-        ListPanel.RefreshMacroList();
-        ListPanel.SelectMacro(SelectedMacroIndex);
+        MacroListPanel.RefreshMacroList();
+        MacroListPanel.SelectMacro(SelectedMacroIndex);
         HandleMacroSelected(SelectedMacroIndex);
     }
 
@@ -338,32 +337,32 @@ public unsafe partial class MacroOptimization
         if (SelectedMacroIndex >= 0 && SelectedMacroIndex < ModuleConfig.ExtendMacroLists.Count)
         {
             ModuleConfig.ExtendMacroLists[SelectedMacroIndex].MacroLines = MacroContentBuffer;
-            ListPanel.SetHasUnmodifiedNewMacro(false);
-            ModuleConfig.Save(Instance);
+            MacroListPanel.SetHasUnmodifiedNewMacro(false);
+            ModuleConfig.Save(ModuleInstance);
 
             if (!ParsedMacroActionIDs.SequenceEqual(oldActionIDs) ||
                 !ParsedCommandTypes.SequenceEqual(oldCommandTypes) ||
                 !ParsedHasTargetFlags.SequenceEqual(oldHasTargetFlags)) // 只有当解析结果真的改变时才更新UI
             {
-                ProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
-                InfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
-                InfoPanel.UpdateExecuteTime();
+                MacroProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
+                MacroInfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
+                MacroInfoPanel.UpdateExecuteTime();
             }
         }
     }
 
 
-    public void ProgressBarUpdate(IFramework framework)
+    private void ProgressBarUpdate(IFramework framework)
     {
         var currentClassJobID = DService.ObjectTable.LocalPlayer?.ClassJob.RowId ?? 0; // 检测职业切换
         if (currentClassJobID != 0 && LastClassJobID != 0 && currentClassJobID != LastClassJobID)
         {
-            ProgressPanel.ClearAllDragDropPayloads(); // 先清除旧职业的payload，防止原生Dragdropnode内容导致崩溃
+            MacroProgressPanel.ClearAllDragDropPayloads(); // 先清除旧职业的 payload，防止原生 DragDropNode 内容导致崩溃
             MacroCacheHelper.RebuildAdjustedActionCache();
             UpdateMacroLines();
-            InfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
-            InfoPanel.UpdateExecuteTime();
-            ProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
+            MacroInfoPanel.SetMacroData(ParsedMacroActionIDs, ParsedCommandTypes);
+            MacroInfoPanel.UpdateExecuteTime();
+            MacroProgressPanel.SetMacroLines(ParsedMacroActionIDs, ParsedCommandTypes, ParsedHasTargetFlags);
         }
         LastClassJobID = currentClassJobID;
 
@@ -373,33 +372,38 @@ public unsafe partial class MacroOptimization
 
         if (actionID == 0 || progressIndex < 0 || progressIndex >= ParsedMacroActionIDs.Count) return;
 
-        ProgressPanel.UpdateProgress(progressIndex, progress);
+        MacroProgressPanel.UpdateProgress(progressIndex, progress);
         //if (progress > 0.9) // 因为游戏本身时延与滑步原因 这个值可能在0.9x左右就可以滑步 
-        //    ProgressPanel.SetProgressColor(progressIndex, KnownColor.Green);
+        //    MacroProgressPanel.SetProgressColor(progressIndex, KnownColor.Green);
     }
 
-    public void UpdateMacroLines()
+    private void UpdateMacroLines()
     {
         var lines = Regex.Split(MacroContentBuffer, "\r\n|\r|\n")
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .ToList();
 
-        MacroExecutor.ParseMacroLines(lines, out var SkillStrings, out var CommandTypes, out var HasTargetFlags, out var macroLineToProgressBarMap, out var MacroIconName);
+        MacroExecutor.ParseMacroLines(lines,
+                                     out var skillStrings,
+                                     out var commandTypes,
+                                     out var hasTargetFlags,
+                                     out var macroLineToProgressBarMap,
+                                     out var macroIconName);
 
-        if (!ParsedMacroActionIDs.SequenceEqual(SkillStrings) ||
-            !ParsedCommandTypes.SequenceEqual(CommandTypes) ||
-            !ParsedHasTargetFlags.SequenceEqual(HasTargetFlags))
+        if (!ParsedMacroActionIDs.SequenceEqual(skillStrings) ||
+            !ParsedCommandTypes.SequenceEqual(commandTypes) ||
+            !ParsedHasTargetFlags.SequenceEqual(hasTargetFlags))
         {
-            ParsedMacroActionIDs = SkillStrings;
-            ParsedCommandTypes = CommandTypes;
-            ParsedHasTargetFlags = HasTargetFlags;
+            ParsedMacroActionIDs = skillStrings;
+            ParsedCommandTypes = commandTypes;
+            ParsedHasTargetFlags = hasTargetFlags;
             MacroLineToProgressIndexMap = macroLineToProgressBarMap;
         }
 
-        if (MacroIconName != LastMiconContent)
+        if (macroIconName != LastMiconContent)
         {
-            LastMiconContent = MacroIconName;
-            UpdateMacroIcon(MacroIconName);
+            LastMiconContent = macroIconName;
+            UpdateMacroIcon(macroIconName);
         }
     }
 
@@ -419,24 +423,24 @@ public unsafe partial class MacroOptimization
 
         ModuleConfig.ExtendMacroLists[SelectedMacroIndex].IconID = iconID;
 
-        ListPanel.UpdateMacroDisplay(SelectedMacroIndex, iconID: iconID);
+        MacroListPanel.UpdateMacroDisplay(SelectedMacroIndex, iconID: iconID);
 
-        InfoPanel.UpdateIcon(iconID);
+        MacroInfoPanel.UpdateIcon(iconID);
     }
 
     protected override void OnFinalize(AtkUnitBase* addon)
     {
         DService.Framework.Update -= ProgressBarUpdate;
 
-        ListPanel?.DetachNode();
-        ListPanel = null;
+        MacroListPanel?.DetachNode();
+        MacroListPanel = null;
 
-        InfoPanel?.DetachNode();
-        InfoPanel = null;
+        MacroInfoPanel?.DetachNode();
+        MacroInfoPanel = null;
 
-        ProgressPanel?.DisposePanel();
-        ProgressPanel?.DetachNode();
-        ProgressPanel = null;
+        MacroProgressPanel?.DisposePanel();
+        MacroProgressPanel?.DetachNode();
+        MacroProgressPanel = null;
 
         MainContainerNode?.DetachNode();
         MainContainerNode = null;

@@ -44,7 +44,7 @@ public unsafe partial class MacroOptimization
                 return ExecuteMacroHook!.Original(raptureShellModule, macro);
 
             var tempMacro = *(MacroLayout*)macro;
-            List<nint>? allocated = null;
+            List<nint>? allocatedUtf8Strings = null;
 
             try
             {
@@ -59,8 +59,8 @@ public unsafe partial class MacroOptimization
 
                     var replacementText = replacement ?? string.Empty;
                     var replacementUtf8 = Utf8String.FromString(replacementText);
-                    allocated ??= [];
-                    allocated.Add((nint)replacementUtf8);
+                    allocatedUtf8Strings ??= [];
+                    allocatedUtf8Strings.Add((nint)replacementUtf8);
                     GetMacroLine(ref tempMacro, i) = *replacementUtf8;
                 }
 
@@ -68,9 +68,9 @@ public unsafe partial class MacroOptimization
             }
             finally
             {
-                if (allocated != null)
+                if (allocatedUtf8Strings != null)
                 {
-                    foreach (var ptr in allocated)
+                    foreach (var ptr in allocatedUtf8Strings)
                         ((Utf8String*)ptr)->Dtor(true);
                 }
             }
@@ -165,6 +165,5 @@ public unsafe partial class MacroOptimization
             public Utf8String Item13;
             public Utf8String Item14;
         }
-
     }
 }

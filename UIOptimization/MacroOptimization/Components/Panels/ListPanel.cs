@@ -11,7 +11,7 @@ namespace DailyRoutines.ModulesPublic;
 internal sealed class ListPanel : ResNode // 宏列表面板
 {
     private readonly MacroConfig          ModuleConfig;
-    private readonly DailyModuleBase Instance;
+    private readonly DailyModuleBase      ModuleInstance;
 
     private readonly List<ExtenMacroButtonNode> MacroButtonList = [];
 
@@ -19,16 +19,16 @@ internal sealed class ListPanel : ResNode // 宏列表面板
     private HorizontalFlexNode?                     SearchContainerNode;
     private TextInputNode?                          SearchBoxNode;
 
-    private string SearchText         = "";
+    private string SearchText         = string.Empty;
     private bool   HasUnsavedNewMacro = false;
 
     public Action<int>?   OnMacroSelected;
-    public System.Action? OnAddNewMacro;
+    public Action?        OnAddNewMacro;
 
     public ListPanel(MacroConfig config, DailyModuleBase instance)
     {
         ModuleConfig = config;
-        Instance = instance;
+        ModuleInstance = instance;
 
         Position = new Vector2(0f, 0f);
         Size = new Vector2(257f, 580f);
@@ -51,7 +51,7 @@ internal sealed class ListPanel : ResNode // 宏列表面板
             IsVisible = true,
             OnInputReceived = (input) =>
             {
-                SearchText = SearchBoxNode.String.ToLower();
+                SearchText = SearchBoxNode.String;
                 RefreshMacroList();
             },
             PlaceholderString = "搜索名称/描述/内容",
@@ -174,8 +174,8 @@ internal sealed class ListPanel : ResNode // 宏列表面板
         if (string.IsNullOrWhiteSpace(SearchText))
             return true;
 
-        return macro.Name.ToLower().Contains(SearchText) ||
-               macro.Description.ToLower().Contains(SearchText) ||
-               macro.MacroLines.ToLower().Contains(SearchText);
+        return macro.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+               macro.Description.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+               macro.MacroLines.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
     }
 }

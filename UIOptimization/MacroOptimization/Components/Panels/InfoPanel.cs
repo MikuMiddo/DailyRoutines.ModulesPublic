@@ -15,7 +15,7 @@ using static DailyRoutines.ModulesPublic.MacroOptimization;
 internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 {
     private readonly MacroConfig          ModuleConfig;
-    private readonly DailyModuleBase Instance;
+    private readonly DailyModuleBase      ModuleInstance;
 
     private readonly List<(int line, string message, string level)> ValidationList = [];
 
@@ -25,28 +25,28 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
     private ResNode?                MacroDetailEditNode;
     private TextMultiLineInputNodeScrollable? MacroLinesInputNode;
     private IconNode?               MacroIconNode;
-    private SimpleImageNode?        MacroRecordButtonNode_Background;
+    private SimpleImageNode?        MacroRecordButtonBackgroundNode;
     private TextInputNode?          NameInputNode;
     private TextInputNode?          DescriptionInputNode;
     private TextNode?               ExecuteTimeNode;
     private TextureButtonNode?      MacroSettingButtonNode;
     private TextureButtonNode?      MacroRecordButtonNode;
     private TextureButtonNode?      InfiniteLoopButtonNode;
-    private SimpleImageNode?        InfiniteLoopButtonNode_Background;
+    private SimpleImageNode?        InfiniteLoopButtonBackgroundNode;
     private TextButtonNode?         ExecuteButton;
     private TextButtonNode?         StopButton;
     private TextButtonNode?         PauseButton;
     private CheckboxNode?           FeasibilityCheckbox;
     private TextNode?               FeasibilityResultNode;
 
-    private string MacroContentBuffer     = "";
+    private string MacroContentBuffer     = string.Empty;
     private int    CurrentMacroIndex      = -1;
     private int    CurrentValidationIndex = 0;
 
     public bool ForceInfiniteLoop = false;
 
     public Action<int>?         OnExecuteMacro;
-    public System.Action?       OnStopMacro;
+    public Action?              OnStopMacro;
     public Action<bool>?        OnPauseMacro;
     public Action<int>?         OnDeleteMacro;
     public Action<string>?      OnMacroContentChanged;
@@ -54,12 +54,12 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
     public Action<int, string>? OnMacroDescriptionChanged;
     public Action<int, uint>?   OnMacroIconChanged;
     public Action<int>?         OnOpenMacroSettings;
-    public System.Action?       OnToggleRecording;
+    public Action?              OnToggleRecording;
 
     public InfoPanel(MacroConfig config, DailyModuleBase instance)
     {
         ModuleConfig = config;
-        Instance = instance;
+        ModuleInstance = instance;
 
         Position = new Vector2(267f, 0f);
         Size = new Vector2(380f, 580f);
@@ -103,7 +103,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
         FeasibilityResultNode.AttachNode(this);
 
-        var StandaloneRunButton = new TextureButtonNode // 独立运行按钮
+        var standaloneRunButton = new TextureButtonNode // 独立运行按钮
         {
             IsVisible = true,
             Size = new(24, 24),
@@ -118,9 +118,9 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                     OpenStandaloneMacroWindowByIndex(CurrentMacroIndex);
             }
         };
-        StandaloneRunButton.AttachNode(this);
+        standaloneRunButton.AttachNode(this);
 
-        var HelpButton = new TextureButtonNode // 帮助按钮
+        var helpButton = new TextureButtonNode // 帮助按钮
         {
             IsVisible = true,
             Size = new(24, 24),
@@ -131,7 +131,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             TextTooltip = "条件宏帮助",
             OnClick = () => MacroHelpAddon.Toggle(),
         };
-        HelpButton.AttachNode(this);
+        helpButton.AttachNode(this);
 
         FeasibilityCheckbox = new CheckboxNode // 可行性检测复选框
         {
@@ -155,7 +155,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         };
         FeasibilityCheckbox.AttachNode(this);
 
-        var RemoveButton = new TextButtonNode
+        var removeButton = new TextButtonNode
         {
             IsVisible = true,
             Size = new(100, 24),
@@ -166,7 +166,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 OnDeleteMacro?.Invoke(CurrentMacroIndex);
             }
         };
-        RemoveButton.AttachNode(this);
+        removeButton.AttachNode(this);
 
         ExecuteButton = new TextButtonNode
         {
@@ -267,12 +267,12 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 Size = new(150.0f, 27.0f),
                 IsVisible = true,
                 Position = new(40f, 0f),
-                OnInputReceived = NewName =>
+                OnInputReceived = newName =>
                 {
-                    var newNameText = NewName.ExtractText();
+                    var newNameText = newName.ExtractText();
                     ModuleConfig.ExtendMacroLists[CurrentMacroIndex].Name = newNameText;
                     OnMacroNameChanged?.Invoke(CurrentMacroIndex, newNameText);
-                    ModuleConfig.Save(Instance);
+                    ModuleConfig.Save(ModuleInstance);
                 }
             };
             NameInputNode.AttachNode(MacroDetailEditNode);
@@ -292,12 +292,12 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 Size = new(250.0f, 27.0f),
                 IsVisible = true,
                 Position = new(40f, 20f),
-                OnInputReceived = NewDescription =>
+                OnInputReceived = newDescription =>
                 {
-                    var newDescText = NewDescription.ExtractText();
+                    var newDescText = newDescription.ExtractText();
                     ModuleConfig.ExtendMacroLists[CurrentMacroIndex].Description = newDescText;
                     OnMacroDescriptionChanged?.Invoke(CurrentMacroIndex, newDescText);
-                    ModuleConfig.Save(Instance);
+                    ModuleConfig.Save(ModuleInstance);
                 }
             };
             DescriptionInputNode.AttachNode(MacroDetailEditNode);
@@ -328,7 +328,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             };
             MacroRecordButtonNode.AttachNode(MacroDetailEditNode);
 
-            MacroRecordButtonNode_Background = new SimpleImageNode
+            MacroRecordButtonBackgroundNode = new SimpleImageNode
             {
                 Position = new(0f, 0f),
                 Size = new(28f, 28f),
@@ -337,7 +337,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 TextureSize = new(28, 28),
                 TextureCoordinates = new(84, 84),
             };
-            MacroRecordButtonNode_Background.AttachNode(MacroRecordButtonNode);
+            MacroRecordButtonBackgroundNode.AttachNode(MacroRecordButtonNode);
             
             InfiniteLoopButtonNode = new TextureButtonNode
             {
@@ -351,7 +351,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 OnClick = () =>
                 {
                     ForceInfiniteLoop = !ForceInfiniteLoop;
-                    InfiniteLoopButtonNode_Background.IsVisible = ForceInfiniteLoop;
+                    InfiniteLoopButtonBackgroundNode.IsVisible = ForceInfiniteLoop;
                     InfiniteLoopButtonNode.TextTooltip = ForceInfiniteLoop
                                                    ? "已启用强制无限循环 (点击取消)"
                                                    : "强制无限循环 (无视宏配置)";
@@ -359,7 +359,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             };
             InfiniteLoopButtonNode.AttachNode(MacroDetailEditNode);
 
-            InfiniteLoopButtonNode_Background = new SimpleImageNode
+            InfiniteLoopButtonBackgroundNode = new SimpleImageNode
             {
                 Position = new(0f, 0f),
                 Size = new(28f, 28f),
@@ -368,7 +368,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 TextureSize = new(28, 28),
                 TextureCoordinates = new(84, 84),
             };
-            InfiniteLoopButtonNode_Background.AttachNode(InfiniteLoopButtonNode);
+            InfiniteLoopButtonBackgroundNode.AttachNode(InfiniteLoopButtonNode);
         }
 
         MacroIconNode.IconId = currentMacro.IconID; // 更新现有节点的内容
@@ -411,7 +411,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
     public void SetRecordingState(bool isRecording)
     {
-        MacroRecordButtonNode_Background.IsVisible = isRecording;
+        MacroRecordButtonBackgroundNode.IsVisible = isRecording;
         MacroRecordButtonNode.ImageNode.AddColor = isRecording
             ? new Vector3(40, 40, 40)
             : Vector3.Zero;
@@ -527,7 +527,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         var skillName = MacroExecutor.ExtractSkillName(line);
         if (!string.IsNullOrEmpty(skillName))
         {
-                var foundActionID = MacroCacheHelper.FindActionID(skillName, LocalPlayerState.ClassJobData);
+            var foundActionID = MacroCacheHelper.FindActionID(skillName, LocalPlayerState.ClassJobData);
             if (foundActionID == null)
             {
                 message = $"未找到技能: {skillName}";

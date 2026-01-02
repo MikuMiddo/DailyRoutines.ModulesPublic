@@ -10,14 +10,14 @@ public unsafe partial class MacroOptimization
     {
         internal static ActionExecutionDetector? ExecutionDetector { get; private set; }
 
-        private static MacroOptimization? Module;
+        private static MacroOptimization? ModuleInstance;
 
         public static void Enable(MacroOptimization module)
         {
             if (ExecutionDetector != null)
                 return;
 
-            Module = module;
+            ModuleInstance = module;
 
             ExecutionDetector = new ActionExecutionDetector();
             ExecutionDetector.OnActionExecuted += OnActionExecutedHandler;
@@ -32,7 +32,7 @@ public unsafe partial class MacroOptimization
                 ExecutionDetector = null;
             }
 
-            Module = null;
+            ModuleInstance = null;
         }
 
         private static void OnActionExecutedHandler(ActionType actionType, uint actionID)
@@ -45,13 +45,14 @@ public unsafe partial class MacroOptimization
 
         private static void RecordActionCooldown(ActionType actionType, uint actionID)
         {
-            var module = Module;
+            var module = ModuleInstance;
             if (module == null)
                 return;
 
             if (actionType == ActionType.CraftAction)
             {
-                if (actionID <= 100000) return; // 生产技能：需要等待制作完成
+                if (actionID <= 100000)
+                    return; // 生产技能：需要等待制作完成
 
                 var startTime = DateTime.UtcNow;
                 var recordedActionType = actionType;
@@ -112,4 +113,3 @@ public unsafe partial class MacroOptimization
         }
     }
 }
-

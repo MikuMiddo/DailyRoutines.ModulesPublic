@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using Dalamud.Game.Addon.Events;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -7,15 +8,15 @@ namespace DailyRoutines.ModulesPublic;
 
 internal sealed class ExtenMacroButtonNode : SimpleComponentNode
 {
-    private readonly NineGridNode hoveredBackgroundNode;
-    private readonly NineGridNode selectedBackgroundNode;
-    private readonly IconNode IconNode;
-    private readonly TextNode NameNode;
-    private readonly TextNode DescriptionNode;
+    private readonly NineGridNode HoveredBackgroundNode;
+    private readonly NineGridNode SelectedBackgroundNode;
+    private readonly IconNode     Icon;
+    private readonly TextNode     Name;
+    private readonly TextNode     Description;
 
-    public ExtenMacroButtonNode(ExtendMacro Macro)
+    public ExtenMacroButtonNode(ExtendMacro macro)
     {
-        hoveredBackgroundNode = new SimpleNineGridNode
+        HoveredBackgroundNode = new SimpleNineGridNode
         {
             NodeId = 2,
             TexturePath = "ui/uld/ListItemA.tex",
@@ -27,9 +28,9 @@ internal sealed class ExtenMacroButtonNode : SimpleComponentNode
             RightOffset = 1,
             IsVisible = false,
         };
-        hoveredBackgroundNode.AttachNode(this);
+        HoveredBackgroundNode.AttachNode(this);
 
-        selectedBackgroundNode = new SimpleNineGridNode
+        SelectedBackgroundNode = new SimpleNineGridNode
         {
             NodeId = 3,
             TexturePath = "ui/uld/ListItemA.tex",
@@ -41,35 +42,35 @@ internal sealed class ExtenMacroButtonNode : SimpleComponentNode
             RightOffset = 1,
             IsVisible = false,
         };
-        selectedBackgroundNode.AttachNode(this);
+        SelectedBackgroundNode.AttachNode(this);
 
-        IconNode = new IconNode
+        Icon = new IconNode
         {
             IsVisible = true,
-            IconId = Macro.IconID,
+            IconId = macro.IconID,
             Size = new(32),
         };
-        IconNode.AttachNode(this);
+        Icon.AttachNode(this);
 
-        NameNode = new TextNode
+        Name = new TextNode
         {
             Size = new(180.0f, 20.0f),
             IsVisible = true,
-            SeString = Macro.Name,
+            SeString = macro.Name,
             FontSize = 16,
             TextFlags = TextFlags.Ellipsis
         };
-        NameNode.AttachNode(this);
+        Name.AttachNode(this);
 
-        DescriptionNode = new TextNode
+        Description = new TextNode
         {
             Size = new(180.0f, 20.0f),
             IsVisible = true,
-            SeString = Macro.Description,
+            SeString = macro.Description,
             FontSize = 16,
             TextFlags = TextFlags.Ellipsis
         };
-        DescriptionNode.AttachNode(this);
+        Description.AttachNode(this);
 
         AddEvent(AtkEventType.MouseOver, () =>
         {
@@ -94,51 +95,51 @@ internal sealed class ExtenMacroButtonNode : SimpleComponentNode
         });
     }
 
-    public System.Action? OnClick { get; set; }
+    public Action? OnClick { get; set; }
 
     public bool IsHovered
     {
-        get => hoveredBackgroundNode.IsVisible;
-        set => hoveredBackgroundNode.IsVisible = value;
+        get => HoveredBackgroundNode.IsVisible;
+        set => HoveredBackgroundNode.IsVisible = value;
     }
 
     public bool IsSelected
     {
-        get => selectedBackgroundNode.IsVisible;
+        get => SelectedBackgroundNode.IsVisible;
         set
         {
-            selectedBackgroundNode.IsVisible = value;
+            SelectedBackgroundNode.IsVisible = value;
             if (value)
-                hoveredBackgroundNode.IsVisible = false;
+                HoveredBackgroundNode.IsVisible = false;
         }
     }
 
     public void UpdateDisplay(uint? newIconID = null, string? newName = null, string? newDescription = null)
     {
         if (newIconID.HasValue)
-            IconNode.IconId = newIconID.Value;
+            Icon.IconId = newIconID.Value;
 
         if (newName != null)
-            NameNode.SeString = newName;
+            Name.SeString = newName;
 
         if (newDescription != null)
-            DescriptionNode.SeString = newDescription;
+            Description.SeString = newDescription;
     }
 
     protected override void OnSizeChanged()
     {
         base.OnSizeChanged();
         CollisionNode.Size = Size;
-        hoveredBackgroundNode.Size = Size;
-        selectedBackgroundNode.Size = Size;
+        HoveredBackgroundNode.Size = Size;
+        SelectedBackgroundNode.Size = Size;
 
-        IconNode.Size = new Vector2(Height, Height) * 0.75f;
-        IconNode.Position = new Vector2(Height, Height) * 0.125f;
+        Icon.Size = new Vector2(Height, Height) * 0.75f;
+        Icon.Position = new Vector2(Height, Height) * 0.125f;
 
-        NameNode.Height = Height / 2.0f;
-        NameNode.Position = new Vector2(Height, Height * 0.15f);
+        Name.Height = Height / 2.0f;
+        Name.Position = new Vector2(Height, Height * 0.15f);
 
-        DescriptionNode.Height = Height / 2.0f;
-        DescriptionNode.Position = new Vector2(Height, Height * 0.55f);
+        Description.Height = Height / 2.0f;
+        Description.Position = new Vector2(Height, Height * 0.55f);
     }
 }

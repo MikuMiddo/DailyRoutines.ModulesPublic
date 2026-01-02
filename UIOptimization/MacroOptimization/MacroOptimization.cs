@@ -19,7 +19,7 @@ public unsafe partial class MacroOptimization : DailyModuleBase
     public override ModuleInfo Info { get; } = new()
     {
         Title = GetLoc("扩展宏"),
-        Description = GetLoc("添加可视化的宏编辑窗口，支持最大255行宏，包括智能录制宏功能与自动重复执行宏。对宏的执行添加条件判断与更加细化的智能目标选取功能。"),
+        Description = GetLoc("添加扩展宏窗口"),
         Category = ModuleCategories.UIOptimization,
         Author = ["Middo"]
     };

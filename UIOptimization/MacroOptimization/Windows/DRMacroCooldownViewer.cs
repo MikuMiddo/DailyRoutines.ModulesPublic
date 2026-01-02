@@ -17,118 +17,115 @@ public unsafe partial class MacroOptimization
 {
     internal sealed class DRMacroCooldownViewer(DailyModuleBase instance) : NativeAddon
     {
-    private readonly DailyModuleBase Instance = instance;
+        private readonly DailyModuleBase Instance = instance;
 
-    private ScrollingAreaNode<ResNode>?         ScrollingArea;
-    private TextInputNode?                       SearchInputNode;
+        private ScrollingAreaNode<ResNode>? ScrollingArea;
+        private TextInputNode?              SearchInputNode;
 
-    private List<(ActionType ActionType, uint ActionID, int CooldownMs, string ActionName, string JobName)>? LastDisplayedEntries;
-    private List<(ActionType ActionType, uint ActionID, int CooldownMs, string ActionName, string JobName)>? CachedActionData;
-    private List<(ActionType ActionType, uint ActionID, int CooldownMs, string ActionName, string JobName)>? CurrentFilteredEntries;
+        private List<(ActionType ActionType, uint ActionID, int CooldownMs, string ActionName, string JobName)>? LastDisplayedEntries;
+        private List<(ActionType ActionType, uint ActionID, int CooldownMs, string ActionName, string JobName)>? CachedActionData;
+        private List<(ActionType ActionType, uint ActionID, int CooldownMs, string ActionName, string JobName)>? CurrentFilteredEntries;
 
-    private string SearchText              = string.Empty;
+        private string SearchText = string.Empty;
 
-    private const int RowHeight = 60;
-    private const int RowSpacing = 5;
-    private const int RowPitch = RowHeight + RowSpacing;
+        private const int RowHeight = 60;
+        private const int RowSpacing = 5;
+        private const int RowPitch = RowHeight + RowSpacing;
 
-    private readonly List<CooldownRow> RowPool = [];
-    private int CurrentScrollPosition;
+        private readonly List<CooldownRow> RowPool = [];
+        private int CurrentScrollPosition;
 
-    protected override void OnSetup(AtkUnitBase* addon)
-    {
-        var MainContainerNode = new ResNode
+        protected override void OnSetup(AtkUnitBase* addon)
         {
-            Position = ContentStartPosition,
-            Size = ContentSize,
-            IsVisible = true,
-        };
-        MainContainerNode.AttachNode(this);
-
-        var TitleNode = new TextNode
-        {
-            IsVisible = true,
-            Size = new(380, 20),
-            Position = new(10f, 0f),
-            SeString = "已录制的技能冷却时间",
-            FontSize = 16,
-            AlignmentType = AlignmentType.Left,
-            TextColor = KnownColor.White.Vector(),
-        };
-        TitleNode.AttachNode(MainContainerNode);
-
-        var HintNode = new TextNode
-        {
-            IsVisible = true,
-            Size = new(460, 20),
-            Position = new(10f, 25f),
-            SeString = "提示: 手动执行生产或战斗技能会自动录制冷却时间",
-            FontSize = 12,
-            AlignmentType = AlignmentType.Left,
-            TextColor = KnownColor.Gray.Vector(),
-        };
-        HintNode.AttachNode(MainContainerNode);
-
-        var SearchLabel = new TextNode
-        {
-            IsVisible = true,
-            Size = new(50, 24),
-            Position = new(10f, 52f),
-            SeString = "搜索:",
-            FontSize = 14,
-            AlignmentType = AlignmentType.Left,
-        };
-        SearchLabel.AttachNode(MainContainerNode);
-
-        SearchInputNode = new TextInputNode
-        {
-            IsVisible = true,
-            Size = new(390f, 32f),
-            Position = new(60f, 48f),
-            PlaceholderString = "输入技能名称、职业或ID...",
-            OnInputReceived = (input) =>
+            var mainContainerNode = new ResNode
             {
-                SearchText = input.ExtractText();
-                RefreshCooldownList();
-            }
-        };
-        SearchInputNode.AttachNode(MainContainerNode);
+                Position = ContentStartPosition,
+                Size = ContentSize,
+                IsVisible = true,
+            };
+            mainContainerNode.AttachNode(this);
 
-        ScrollingArea = new ScrollingAreaNode<ResNode>
-        {
-            IsVisible = true,
-            Position = new(10f, 85f),
-            Size = new(445f, 360f),
-            ContentHeight = 0,
-            ScrollSpeed = 24,
-        };
-        ScrollingArea.AttachNode(MainContainerNode);
-        ScrollingArea.ScrollBarNode.OnValueChanged = scrollPos =>
-        {
-            // 注意：这里传入的是 PendingScrollPosition（ScrollBarNode.UpdateHandler），
-            // 在某些情况下 ScrollPosition 还没同步更新，因此必须用参数驱动刷新，否则会出现“滚动条动了但内容不动”。
-            CurrentScrollPosition = scrollPos;
-            UpdateVisibleRows(scrollPos);
-        };
-
-        // 兜底（非轮询）：部分输入路径可能不触发 ValueUpdate，这里监听滚轮事件，延迟 1 tick 再刷新。
-        ScrollingArea.ScrollingCollisionNode.AddEvent(AtkEventType.MouseWheel, () =>
-            DService.Framework.RunOnTick(() =>
+            var titleNode = new TextNode
             {
-                if (ScrollingArea == null)
-                    return;
+                IsVisible = true,
+                Size = new(380, 20),
+                Position = new(10f, 0f),
+                SeString = "已录制的技能冷却时间",
+                FontSize = 16,
+                AlignmentType = AlignmentType.Left,
+                TextColor = KnownColor.White.Vector(),
+            };
+            titleNode.AttachNode(mainContainerNode);
 
-                var pos = ScrollingArea.ScrollBarNode.ScrollPosition;
-                if (pos == CurrentScrollPosition)
-                    return;
+            var hintNode = new TextNode
+            {
+                IsVisible = true,
+                Size = new(460, 20),
+                Position = new(10f, 25f),
+                SeString = "提示: 手动执行生产或战斗技能会自动录制冷却时间",
+                FontSize = 12,
+                AlignmentType = AlignmentType.Left,
+                TextColor = KnownColor.Gray.Vector(),
+            };
+            hintNode.AttachNode(mainContainerNode);
 
-                CurrentScrollPosition = pos;
-                UpdateVisibleRows(pos);
-            }, delayTicks: 1));
+            var searchLabel = new TextNode
+            {
+                IsVisible = true,
+                Size = new(50, 24),
+                Position = new(10f, 52f),
+                SeString = "搜索:",
+                FontSize = 14,
+                AlignmentType = AlignmentType.Left,
+            };
+            searchLabel.AttachNode(mainContainerNode);
 
-        BuildCache(); // 初始化时构建缓存
-        RefreshCooldownList();
-    }
+            SearchInputNode = new TextInputNode
+            {
+                IsVisible = true,
+                Size = new(390f, 32f),
+                Position = new(60f, 48f),
+                PlaceholderString = "输入技能名称、职业或ID...",
+                OnInputReceived = (input) =>
+                {
+                    SearchText = input.ExtractText();
+                    RefreshCooldownList();
+                }
+            };
+            SearchInputNode.AttachNode(mainContainerNode);
+
+            ScrollingArea = new ScrollingAreaNode<ResNode>
+            {
+                IsVisible = true,
+                Position = new(10f, 85f),
+                Size = new(445f, 360f),
+                ContentHeight = 0,
+                ScrollSpeed = 24,
+            };
+            ScrollingArea.AttachNode(mainContainerNode);
+            ScrollingArea.ScrollBarNode.OnValueChanged = scrollPos =>
+            {
+                CurrentScrollPosition = scrollPos; // 在某些情况下 ScrollPosition 还没同步更新，因此必须用参数驱动刷新，否则会出现“滚动条动了但内容不动”。
+                UpdateVisibleRows(scrollPos);
+            };
+
+            ScrollingArea.ScrollingCollisionNode.AddEvent(AtkEventType.MouseWheel, () => // 部分输入路径可能不触发 ValueUpdate，这里监听滚轮事件，延迟 1 tick 再刷新。
+                DService.Framework.RunOnTick(() =>
+                {
+                    if (ScrollingArea == null)
+                        return;
+
+                    var pos = ScrollingArea.ScrollBarNode.ScrollPosition;
+                    if (pos == CurrentScrollPosition)
+                        return;
+
+                    CurrentScrollPosition = pos;
+                    UpdateVisibleRows(pos);
+                }, delayTicks: 1));
+
+            BuildCache(); // 初始化时构建缓存
+            RefreshCooldownList();
+        }
 
     private void BuildCache()
     {
@@ -213,9 +210,7 @@ public unsafe partial class MacroOptimization
         if (ScrollingArea == null || CurrentFilteredEntries == null || RowPool.Count == 0)
             return;
 
-        // ScrollBar 组件会移动 ContentNode.Y 来实现原生滚动；虚拟化方案需要把它当作“父节点偏移”并补偿。
-        // 否则会出现整体上移/下移，导致底部空白。
-        var parentOffsetY = ScrollingArea.ContentNode.Y;
+        var parentOffsetY = ScrollingArea.ContentNode.Y; // ScrollBar 组件会移动 ContentNode.Y 来实现原生滚动；虚拟滚动需要把它当作“父节点偏移”并补偿。 此处使用虚拟滚动的目的是为了在row极多（大于500）时不会导致UI卡顿。
 
         var entries = CurrentFilteredEntries;
         if (entries.Count == 0)

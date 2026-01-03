@@ -37,6 +37,7 @@ public unsafe partial class MacroOptimization
         private TextNode?          LoopCountLabel;
 
         private bool ForceInfiniteLoop;
+        private bool AutoRunOnSetup;
 
         protected override void OnSetup(AtkUnitBase* addon)
         {
@@ -64,17 +65,21 @@ public unsafe partial class MacroOptimization
                 TexturePath = "ui/uld/CircleButtons_hr1.tex",
                 TextureSize = new(28, 28),
                 TextureCoordinates = new(112, 0),
-                TextTooltip = "强制无限循环 (无视宏配置)",
+                TextTooltip = GetLoc("MacroOptimization-Info-ForceInfiniteLoopTooltip"),
                 OnClick = () =>
                 {
                     ForceInfiniteLoop = !ForceInfiniteLoop;
                     InfiniteLoopButtonBackground.IsVisible = ForceInfiniteLoop;
                     InfiniteLoopButton.TextTooltip = ForceInfiniteLoop
-                        ? "已启用强制无限循环 (点击取消)"
-                        : "强制无限循环 (无视宏配置)";
+                        ? GetLoc("MacroOptimization-Info-ForceInfiniteLoopEnabledTooltip")
+                        : GetLoc("MacroOptimization-Info-ForceInfiniteLoopTooltip");
 
                     if (LoopCountLabel is { } label)
-                        label.SeString = ForceInfiniteLoop ? "无限循环" : "剩余循环:";
+                    {
+                        label.SeString = ForceInfiniteLoop
+                            ? GetLoc("MacroOptimization-Process-InfiniteLoop")
+                            : GetLoc("MacroOptimization-Process-RemainingLoopCount");
+                    }
 
                     if (LoopCountInput is { } input)
                         input.Alpha = ForceInfiniteLoop ? 0.5f : 1.0f;
@@ -98,7 +103,7 @@ public unsafe partial class MacroOptimization
                 Position = new(160f, buttonY),
                 Size = new(100, 24),
                 IsVisible = true,
-                String = "执行",
+                String = GetLoc("Execute"),
                 OnClick = () =>
                 {
                     if (MacroExecutorInstance?.IsRunning != true) // 运行时禁用调整无限循环按钮
@@ -120,14 +125,14 @@ public unsafe partial class MacroOptimization
                 Position = new(160f, buttonY),
                 Size = new(50, 24),
                 IsVisible = false,
-                String = "停止",
+                String = GetLoc("Stop"),
                 OnClick = () => // 恢复执行按钮
                 {
                     StopMacro();
                     ExecuteButton.IsVisible = true;
                     StopButton.IsVisible = false;
                     PauseButton.IsVisible = false;
-                    PauseButton.String = "暂停";
+                    PauseButton.String = GetLoc("Pause");
 
                     if (InfiniteLoopButton != null)
                         InfiniteLoopButton.IsEnabled = true;
@@ -143,12 +148,14 @@ public unsafe partial class MacroOptimization
                 Position = new(210f, buttonY),
                 Size = new(50, 24),
                 IsVisible = false,
-                String = "暂停",
+                String = GetLoc("Pause"),
                 OnClick = () =>
                 {
-                    var isPaused = PauseButton.String == "继续";
-                    PauseButton.String = isPaused ? "暂停" : "继续";
-                    if (isPaused)
+                    var shouldResume = PauseButton.String == GetLoc("MacroOptimization-Common-Resume");
+                    PauseButton.String = shouldResume
+                        ? GetLoc("Pause")
+                        : GetLoc("MacroOptimization-Common-Resume");
+                    if (shouldResume)
                         ResumeMacro();
                     else
                         PauseMacro();
@@ -159,7 +166,9 @@ public unsafe partial class MacroOptimization
             LoopCountLabel = new TextNode
             {
                 Position = new(45f, buttonY + 12f),
-                SeString = ForceInfiniteLoop ? "无限循环" : "剩余循环:",
+                SeString = ForceInfiniteLoop
+                    ? GetLoc("MacroOptimization-Process-InfiniteLoop")
+                    : GetLoc("MacroOptimization-Process-RemainingLoopCount"),
                 FontSize = 12,
                 AlignmentType = AlignmentType.Left,
                 IsVisible = true
@@ -187,10 +196,17 @@ public unsafe partial class MacroOptimization
             }
 
             LoopCountInput.AttachNode(this);
+
+            if (AutoRunOnSetup)
+            {
+                AutoRunOnSetup = false;
+                StartMacroWithUIState();
+            }
         }
 
-    public void OpenWithExtendMacro(ExtendMacro macro, int? loopCount = null)
+    public void OpenWithExtendMacro(ExtendMacro macro, int? loopCount = null, bool autoRun = false)
     {
+        AutoRunOnSetup = autoRun; //使用/call命令时自动运行，手动打开窗口时不自动运行
         DefaultInterval = macro.DefaultInterval;
         TotalLoopCount = loopCount ?? macro.LoopCount; // 使用传入的循环次数，如果没有则使用宏配置的循环次数
         CompletionDelay = macro.CompletionDelay;
@@ -218,10 +234,15 @@ public unsafe partial class MacroOptimization
         Open();
         if (LoopCountInput is { } loopInput)
             loopInput.Value = TotalLoopCount;
+
+        if (MacroProgressPanel != null && AutoRunOnSetup)
+        {
+            AutoRunOnSetup = false;
+            StartMacroWithUIState();
+        }
     }
 
-    // 开始执行宏
-    public void StartMacro()
+    public void StartMacro() // 开始执行宏
     {
         if (MacroExecutorInstance?.IsRunning == true) return;
 
@@ -314,7 +335,7 @@ public unsafe partial class MacroOptimization
             ExecuteButton.IsVisible = true;
             StopButton.IsVisible = false;
             PauseButton.IsVisible = false;
-            PauseButton.String = "暂停";
+            PauseButton.String = GetLoc("Pause");
 
             if (InfiniteLoopButton != null)
                 InfiniteLoopButton.IsEnabled = true;
@@ -331,6 +352,23 @@ public unsafe partial class MacroOptimization
         MacroExecutorInstance.Start();
 
         DService.Framework.Update += ProgressBarUpdate;
+    }
+
+    private void StartMacroWithUIState()
+    {
+        if (MacroExecutorInstance?.IsRunning == true) return;
+
+        StartMacro();
+
+        if (ExecuteButton != null)
+            ExecuteButton.IsVisible = false;
+        if (StopButton != null)
+            StopButton.IsVisible = true;
+        if (PauseButton != null)
+            PauseButton.IsVisible = true;
+
+        if (InfiniteLoopButton != null)
+            InfiniteLoopButton.IsEnabled = false;
     }
 
     private void ProgressBarUpdate(IFramework framework)

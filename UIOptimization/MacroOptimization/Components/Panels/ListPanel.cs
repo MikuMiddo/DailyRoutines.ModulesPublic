@@ -8,6 +8,8 @@ using KamiToolKit.Nodes;
 
 namespace DailyRoutines.ModulesPublic;
 
+public unsafe partial class MacroOptimization
+{
 internal sealed class ListPanel : ResNode // 宏列表面板
 {
     private readonly MacroConfig          ModuleConfig;
@@ -54,7 +56,7 @@ internal sealed class ListPanel : ResNode // 宏列表面板
                 SearchText = SearchBoxNode.String;
                 RefreshMacroList();
             },
-            PlaceholderString = "搜索名称/描述/内容",
+            PlaceholderString = GetLoc("MacroOptimization-List-SearchPlaceholder"),
             AutoSelectAll = true,
         };
         SearchContainerNode.AddNode(SearchBoxNode);
@@ -110,7 +112,7 @@ internal sealed class ListPanel : ResNode // 宏列表面板
 
         var newMacroPlaceholder = new ExtendMacro
         {
-            Name = "点此添加新的宏",
+            Name = GetLoc("MacroOptimization-List-AddNewMacro"),
             Description = "",
             IconID = 138,
             MacroLines = ""
@@ -131,11 +133,11 @@ internal sealed class ListPanel : ResNode // 宏列表面板
         addButton.AddEvent(AtkEventType.MouseOver, () =>
         {
             if (HasUnsavedNewMacro)
-                addButton.UpdateDisplay(102, "存在未修改的新宏", "请修改后再添加");
+                addButton.UpdateDisplay(102, GetLoc("MacroOptimization-List-UnsavedNewMacroTitle"), GetLoc("MacroOptimization-List-UnsavedNewMacroHint"));
         });
         addButton.AddEvent(AtkEventType.MouseOut, () =>
         {
-            addButton.UpdateDisplay(138, "点此添加新的宏", string.Empty);
+            addButton.UpdateDisplay(138, GetLoc("MacroOptimization-List-AddNewMacro"), string.Empty);
         });
 
         MacroContainerNode.ContentHeight += addButton.Height;
@@ -178,4 +180,5 @@ internal sealed class ListPanel : ResNode // 宏列表面板
                macro.Description.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                macro.MacroLines.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
     }
+}
 }

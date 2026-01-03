@@ -224,11 +224,11 @@ public unsafe partial class MacroOptimization
 
         public static uint? FindMacroIconID(string miconString, ClassJob currentClassJob)
         {
-            if (MacroCacheHelper.JobSpecificIcons.TryGetValue(miconString, out var jobIcons) &&
+            if (JobSpecificIcons.TryGetValue(miconString, out var jobIcons) &&
                 jobIcons.TryGetValue(currentClassJob.RowId, out var jobSpecificIcon))
                 return jobSpecificIcon;
 
-            if (MacroCacheHelper.AllIcons.TryGetValue(miconString, out var generalIcon))
+            if (AllIcons.TryGetValue(miconString, out var generalIcon))
                 return generalIcon;
 
             return null;

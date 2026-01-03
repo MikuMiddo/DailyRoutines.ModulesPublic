@@ -939,7 +939,7 @@ public unsafe partial class MacroOptimization
             if (callMatch.Groups[2].Success && int.TryParse(callMatch.Groups[2].Value, out var loops))
                 loopCount = loops;
 
-            OpenStandaloneMacroWindowByName(macroName, loopCount);
+            OpenStandaloneMacroWindowByName(macroName, loopCount, autoRun: true);
             return true;
         }
 

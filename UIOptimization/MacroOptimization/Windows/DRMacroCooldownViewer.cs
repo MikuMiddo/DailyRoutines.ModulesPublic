@@ -50,7 +50,7 @@ public unsafe partial class MacroOptimization
                 IsVisible = true,
                 Size = new(380, 20),
                 Position = new(10f, 0f),
-                SeString = "已录制的技能冷却时间",
+                SeString = GetLoc("MacroOptimization-CooldownViewer-Title"),
                 FontSize = 16,
                 AlignmentType = AlignmentType.Left,
                 TextColor = KnownColor.White.Vector(),
@@ -62,7 +62,7 @@ public unsafe partial class MacroOptimization
                 IsVisible = true,
                 Size = new(460, 20),
                 Position = new(10f, 25f),
-                SeString = "提示: 手动执行生产或战斗技能会自动录制冷却时间",
+                SeString = GetLoc("MacroOptimization-CooldownViewer-Hint"),
                 FontSize = 12,
                 AlignmentType = AlignmentType.Left,
                 TextColor = KnownColor.Gray.Vector(),
@@ -74,7 +74,7 @@ public unsafe partial class MacroOptimization
                 IsVisible = true,
                 Size = new(50, 24),
                 Position = new(10f, 52f),
-                SeString = "搜索:",
+                SeString = GetLoc("MacroOptimization-CooldownViewer-Search"),
                 FontSize = 14,
                 AlignmentType = AlignmentType.Left,
             };
@@ -85,7 +85,7 @@ public unsafe partial class MacroOptimization
                 IsVisible = true,
                 Size = new(390f, 32f),
                 Position = new(60f, 48f),
-                PlaceholderString = "输入技能名称、职业或ID...",
+                PlaceholderString = GetLoc("MacroOptimization-CooldownViewer-SearchPlaceholder"),
                 OnInputReceived = (input) =>
                 {
                     SearchText = input.ExtractText();
@@ -176,7 +176,9 @@ public unsafe partial class MacroOptimization
             CurrentScrollPosition = 0;
 
             if (RowPool.Count > 0)
-                RowPool[0].BindEmpty(CachedActionData.Count == 0 ? "暂无录制的冷却数据" : "未找到匹配的技能");
+                RowPool[0].BindEmpty(CachedActionData.Count == 0
+                    ? GetLoc("MacroOptimization-CooldownViewer-Empty")
+                    : GetLoc("MacroOptimization-CooldownViewer-NoMatch"));
 
             for (var i = 1; i < RowPool.Count; i++)
                 RowPool[i].Hide();
@@ -307,7 +309,7 @@ public unsafe partial class MacroOptimization
                 IsVisible = true,
                 Size = new(65, 20),
                 Position = new(250f, 22f),
-                SeString = "当前冷却:",
+                SeString = GetLoc("MacroOptimization-CooldownViewer-CurrentCooldown"),
                 FontSize = 12,
                 AlignmentType = AlignmentType.Left,
                 TextColor = KnownColor.White.Vector(),
@@ -424,7 +426,7 @@ public unsafe partial class MacroOptimization
     
     private static string GetJobNameForAction(ActionType actionType, uint actionID)
     {
-        string jobName = "未知职业";
+        string jobName = GetLoc("MacroOptimization-CooldownViewer-UnknownJob");
 
         if (actionType == ActionType.CraftAction)
         {

@@ -10,8 +10,8 @@ using KamiToolKit.Nodes;
 
 namespace DailyRoutines.ModulesPublic;
 
-using static DailyRoutines.ModulesPublic.MacroOptimization;
-
+public unsafe partial class MacroOptimization
+{
 internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 {
     private readonly MacroConfig          ModuleConfig;
@@ -81,7 +81,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             IsVisible = true,
             Size = new(740, 24),
             Position = new(-190f, -40f),
-            SeString = "如不进行可行性检测或未通过 就无法执行当前宏",
+            SeString = GetLoc("MacroOptimization-Info-FeasibilityNotPassed"),
             FontSize = 14,
             AlignmentType = AlignmentType.Center,
             TextColor = KnownColor.Orange.Vector(),
@@ -111,7 +111,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             TexturePath = "ui/uld/CircleButtons_hr1.tex",
             TextureSize = new(28, 28),
             TextureCoordinates = new(56, 28),
-            TextTooltip = "在独立窗口运行此宏",
+            TextTooltip = GetLoc("MacroOptimization-Info-StandaloneRunTooltip"),
             OnClick = () =>
             {
                 if (CurrentMacroIndex >= 0 && CurrentMacroIndex < ModuleConfig.ExtendMacroLists.Count)
@@ -128,7 +128,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             TexturePath = "ui/uld/CircleButtons_hr1.tex",
             TextureSize = new(28, 28),
             TextureCoordinates = new(84, 0),
-            TextTooltip = "条件宏帮助",
+            TextTooltip = GetLoc("MacroOptimization-Info-HelpTooltip"),
             OnClick = () => MacroHelpAddon.Toggle(),
         };
         helpButton.AttachNode(this);
@@ -138,7 +138,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             IsVisible = true,
             Size = new(20, 20),
             Position = new(290f, -8f),
-            SeString = "可行性检测",
+            SeString = GetLoc("MacroOptimization-Info-FeasibilityCheck"),
             OnClick = (isChecked) =>
             {
                 ValidationList.Clear();
@@ -147,7 +147,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                     PerformFeasibilityCheck();
                 else
                 {
-                    FeasibilityResultNode.SeString = "如不进行可行性检测或未通过 就无法执行当前宏";
+                    FeasibilityResultNode.SeString = GetLoc("MacroOptimization-Info-FeasibilityNotPassed");
                     FeasibilityResultNode.TextColor = KnownColor.Orange.Vector();
                     ExecuteButton.IsEnabled = false;
                 }
@@ -160,7 +160,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             IsVisible = true,
             Size = new(100, 24),
             Position = new(290f, 15f),
-            String = "删除",
+            String = GetLoc("Delete"),
             OnClick = () =>
             {
                 OnDeleteMacro?.Invoke(CurrentMacroIndex);
@@ -173,7 +173,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             IsVisible = true,
             Size = new(100, 24),
             Position = new(290f, 37f),
-            String = "执行",
+            String = GetLoc("Execute"),
             OnClick = () =>
             {
                 OnExecuteMacro?.Invoke(CurrentMacroIndex);
@@ -187,7 +187,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             IsVisible = false,
             Size = new(50, 24),
             Position = new(290f, 37f),
-            String = "停止",
+            String = GetLoc("MacroOptimization-Common-Stop"),
             OnClick = () =>
             {
                 OnStopMacro?.Invoke();
@@ -200,12 +200,12 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             IsVisible = false,
             Size = new(50, 24),
             Position = new(340f, 37f),
-            String = "暂停",
+            String = GetLoc("Pause"),
             OnClick = () =>
             {
-                var isPaused = PauseButton.String == "继续";
-                PauseButton.String = isPaused ? "暂停" : "继续";
-                OnPauseMacro?.Invoke(!isPaused);
+                var shouldResume = PauseButton.String == GetLoc("MacroOptimization-Common-Resume");
+                PauseButton.String = shouldResume ? GetLoc("Pause") : GetLoc("MacroOptimization-Common-Resume");
+                OnPauseMacro?.Invoke(!shouldResume);
             }
         };
         PauseButton.AttachNode(this);
@@ -310,7 +310,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 TexturePath = "ui/uld/CircleButtons_hr1.tex",
                 TextureSize = new(28, 28),
                 TextureCoordinates = new(0, 0),
-                TextTooltip = "宏设置",
+                TextTooltip = GetLoc("MacroOptimization-Window-Settings"),
                 OnClick = () => OnOpenMacroSettings?.Invoke(CurrentMacroIndex),
             };
             MacroSettingButtonNode.AttachNode(MacroDetailEditNode);
@@ -323,7 +323,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 TexturePath = "ui/uld/lfg_hr1.tex",
                 TextureSize = new(28, 28),
                 TextureCoordinates = new(28, 135),
-                TextTooltip = "开始录制技能到宏",
+                TextTooltip = GetLoc("MacroOptimization-Info-RecordTooltip"),
                 OnClick = () => OnToggleRecording?.Invoke(),
             };
             MacroRecordButtonNode.AttachNode(MacroDetailEditNode);
@@ -347,14 +347,14 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 TexturePath = "ui/uld/CircleButtons_hr1.tex",
                 TextureSize = new(28, 28),
                 TextureCoordinates = new(112, 0),
-                TextTooltip = "强制无限循环 (无视宏配置)",
+                TextTooltip = GetLoc("MacroOptimization-Info-ForceInfiniteLoopTooltip"),
                 OnClick = () =>
                 {
                     ForceInfiniteLoop = !ForceInfiniteLoop;
                     InfiniteLoopButtonBackgroundNode.IsVisible = ForceInfiniteLoop;
                     InfiniteLoopButtonNode.TextTooltip = ForceInfiniteLoop
-                                                   ? "已启用强制无限循环 (点击取消)"
-                                                   : "强制无限循环 (无视宏配置)";
+                                                   ? GetLoc("MacroOptimization-Info-ForceInfiniteLoopEnabledTooltip")
+                                                   : GetLoc("MacroOptimization-Info-ForceInfiniteLoopTooltip");
                 }
             };
             InfiniteLoopButtonNode.AttachNode(MacroDetailEditNode);
@@ -374,7 +374,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         MacroIconNode.IconId = currentMacro.IconID; // 更新现有节点的内容
         NameInputNode.SeString = currentMacro.Name;
         DescriptionInputNode.SeString = currentMacro.Description;
-        ExecuteTimeNode.SeString = $"约耗时：{FormatExecuteTime(CalculateTotalExecuteTime())} 秒";
+        ExecuteTimeNode.SeString = GetLoc("MacroOptimization-Info-EstimatedTime", FormatExecuteTime(CalculateTotalExecuteTime()));
     }
 
     public string GetTextBuffer() => MacroContentBuffer;
@@ -399,7 +399,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         ExecuteButton.IsVisible = true;
         StopButton.IsVisible = false;
         PauseButton.IsVisible = false;
-        PauseButton.String = "暂停";
+        PauseButton.String = GetLoc("Pause");
     }
 
     public void ShowStopPauseButtons()
@@ -416,7 +416,9 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             ? new Vector3(40, 40, 40)
             : Vector3.Zero;
 
-        MacroRecordButtonNode.TextTooltip = isRecording ? "正在录制... (点击停止)" : "开始录制技能到宏";
+        MacroRecordButtonNode.TextTooltip = isRecording
+            ? GetLoc("MacroOptimization-Info-RecordingTooltip")
+            : GetLoc("MacroOptimization-Info-RecordTooltip");
     }
 
     private void PerformFeasibilityCheck()
@@ -446,7 +448,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
         if (ValidationList.Count == 0)
         {
-            FeasibilityResultNode.SeString = $"检测通过: 所有命令有效 ({validLines}/{totalLines})";
+            FeasibilityResultNode.SeString = GetLoc("MacroOptimization-Info-FeasibilityPassed", validLines, totalLines);
             FeasibilityResultNode.TextColor = KnownColor.Green.Vector();
             ExecuteButton.IsEnabled = true;
         }
@@ -466,14 +468,22 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             CurrentValidationIndex = 0;
 
         var current = ValidationList[CurrentValidationIndex];
-        var levelText = current.level == "error" ? "错误" : "警告";
+        var levelText = current.level == "error"
+            ? GetLoc("MacroOptimization-Info-ValidationLevelError")
+            : GetLoc("MacroOptimization-Info-ValidationLevelWarning");
         var color = current.level == "error" ? KnownColor.Red.Vector() : KnownColor.Yellow.Vector();
 
         var sameLevelItems = ValidationList.Where(v => v.level == current.level).ToList();
         var currentLevelIndex = sameLevelItems.FindIndex(v => v.line == current.line && v.message == current.message) + 1;
         var sameLevelCount = sameLevelItems.Count;
 
-        FeasibilityResultNode.SeString = $"第{current.line}行{levelText}: {current.message} (第{currentLevelIndex}个/共{sameLevelCount}个)";
+        FeasibilityResultNode.SeString = GetLoc(
+            "MacroOptimization-Info-FeasibilityDetail",
+            current.line,
+            levelText,
+            current.message,
+            currentLevelIndex,
+            sameLevelCount);
         FeasibilityResultNode.TextColor = color;
     }
 
@@ -481,7 +491,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
     {
         if (!line.StartsWith('/'))
         {
-            message = "命令必须以 / 开头";
+            message = GetLoc("MacroOptimization-Validate-MustStartWithSlash");
             level = "error";
             return true;
         }
@@ -491,7 +501,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             var ifMatch = Regex.Match(line, @"^/if\s+\[(.+?)\]\s+(/.+)$", RegexOptions.IgnoreCase);
             if (!ifMatch.Success)
             {
-                message = "/if 条件必须使用方括号格式: /if [条件] /命令";
+                message = GetLoc("MacroOptimization-Validate-IfConditionFormat");
                 level = "error";
                 return true;
             }
@@ -504,7 +514,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
             if (HasLineErrors(innerCommand, config, out message, out level)) // 递归检查内部命令
             {
-                message = $"if命令中的内容错误: {message}";
+                message = GetLoc("MacroOptimization-Validate-IfInnerError", message ?? string.Empty);
                 return true;
             }
 
@@ -530,7 +540,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             var foundActionID = MacroCacheHelper.FindActionID(skillName, LocalPlayerState.ClassJobData);
             if (foundActionID == null)
             {
-                message = $"未找到技能: {skillName}";
+                message = GetLoc("MacroOptimization-Validate-SkillNotFound", skillName);
                 level = "error";
                 return true;
             }
@@ -543,7 +553,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             if (!line.Substring(echoMatch.Groups[0].Value.Length - echoMatch.Groups[2].Value.Length).Contains(' ') ||
                 string.IsNullOrWhiteSpace(line.Substring(("/" + command).Length)))
             {
-                message = "Echo命令没有输出内容";
+                message = GetLoc("MacroOptimization-Validate-EchoNoOutput");
                 level = "warning";
                 return true;
             }
@@ -573,7 +583,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         var targetPrefixMatch = Regex.Match(condition, @"^(self|target|focus|party)\.(.+)$", RegexOptions.IgnoreCase); // 解析带目标前缀的条件 (self.xxx / target.xxx / focus.xxx / party.xxx / party.N.xxx)
         if (!targetPrefixMatch.Success)
         {
-            message = $"条件必须使用前缀 (self/target/focus/party): {condition}";
+            message = GetLoc("MacroOptimization-Validate-ConditionMissingPrefix", condition);
             level = "error";
             return true;
         }
@@ -593,7 +603,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
         if (!int.TryParse(indexStr, out var index) || index < 1 || index > 8)
         {
-            message = $"队伍索引必须在 1-8 之间: {indexStr}";
+            message = GetLoc("MacroOptimization-Validate-PartyIndexRange", indexStr);
             level = "error";
             return true;
         }
@@ -624,7 +634,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             return false;
         }
 
-        message = $"不支持的队伍条件: {condition}";
+        message = GetLoc("MacroOptimization-Validate-UnsupportedPartyCondition", condition);
         level = "error";
         return true;
     }
@@ -667,7 +677,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             return false;
         }
 
-        message = $"不支持的条件表达式: {condition}";
+        message = GetLoc("MacroOptimization-Validate-UnsupportedConditionExpression", condition);
         level = "error";
         return true;
     }
@@ -687,7 +697,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
         if (commandWithSlash == "/")
         {
-            message = "命令不完整: /";
+            message = GetLoc("MacroOptimization-Validate-IncompleteCommandSlash");
             level = "error";
             return true;
         }
@@ -702,7 +712,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 return false;
             }
 
-            message = $"未知命令: {commandWithSlash}";
+            message = GetLoc("MacroOptimization-Validate-UnknownCommand", commandWithSlash);
             level = "warning";
             return true;
         }
@@ -717,7 +727,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         var afterCommand = line[commandWithSlash.Length..].Trim();
         if (string.IsNullOrWhiteSpace(afterCommand))
         {
-            message = $"命令缺少参数: {commandWithSlash}";
+            message = GetLoc("MacroOptimization-Validate-MissingCommandArgs", commandWithSlash);
             level = "error";
             return true;
         }
@@ -732,14 +742,14 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
 
                 if (matchingMacros.Count == 0)
                 {
-                    message = $"未找到宏: {macroName}";
+                    message = GetLoc("MacroOptimization-Chat-MacroNotFound", macroName);
                     level = "error";
                     return true;
                 }
 
                 if (matchingMacros.Count > 1)
                 {
-                    message = $"存在 {matchingMacros.Count} 个同名宏 '{macroName}'，将使用第一个";
+                    message = GetLoc("MacroOptimization-Validate-DuplicateMacroNames", matchingMacros.Count, macroName);
                     level = "warning";
                     return true;
                 }
@@ -780,7 +790,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
     public void UpdateExecuteTime()
     {
         if (ExecuteTimeNode != null)
-            ExecuteTimeNode.SeString = $"约耗时：{FormatExecuteTime(CalculateTotalExecuteTime())} 秒";
+            ExecuteTimeNode.SeString = GetLoc("MacroOptimization-Info-EstimatedTime", FormatExecuteTime(CalculateTotalExecuteTime()));
     }
 
     private static string FormatExecuteTime(float seconds)
@@ -800,7 +810,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
         {
             var incompleteMatch = Regex.Match(line, @"<[^>]*$");
             if (incompleteMatch.Success)
-                return $"后缀不完整: {incompleteMatch.Value}";
+                return GetLoc("MacroOptimization-Validate-SuffixIncomplete", incompleteMatch.Value);
         }
 
         var bracketMatches = Regex.Matches(line, @"<[^>]*>", RegexOptions.IgnoreCase);
@@ -810,12 +820,12 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
             var innerText = bracketText[1..^1].Trim();
 
             if (string.IsNullOrEmpty(innerText))
-                return $"后缀不能为空: {bracketText}";
+                return GetLoc("MacroOptimization-Validate-SuffixEmpty", bracketText);
 
             if (innerText.StartsWith("wait", StringComparison.OrdinalIgnoreCase)) // <wait.1> 或 <wait.1.5>
             {
                 if (!Regex.IsMatch(bracketText, @"<[Ww]ait\.\d+(?:\.\d+)?>"))
-                    return $"Wait语法错误: {bracketText}";
+                    return GetLoc("MacroOptimization-Validate-WaitSyntaxError", bracketText);
                 continue;
             }
 
@@ -826,14 +836,14 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 var colonIndex = innerText.IndexOf(':');
                 var statusIDPart = innerText[(colonIndex + 1)..];
                 if (string.IsNullOrWhiteSpace(statusIDPart) || !uint.TryParse(statusIDPart, out _))
-                    return $"状态ID格式错误: {bracketText}";
+                    return GetLoc("MacroOptimization-Validate-StatusIdFormatError", bracketText);
                 continue;
             }
 
             if (innerText.Length > 0 && char.IsDigit(innerText[0])) // <1> 到 <8> 队伍编号
             {
                 if (!uint.TryParse(innerText, out var num) || num < 1 || num > 8)
-                    return $"队伍编号必须在1-8之间: {bracketText}";
+                    return GetLoc("MacroOptimization-Validate-PartyNumberRange", bracketText);
                 continue;
             }
 
@@ -858,7 +868,7 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 {
                     var num = int.Parse(partyNumMatch.Groups[1].Value);
                     if (num < 1 || num > 8)
-                        return $"队伍编号必须在1-8之间: {bracketText}";
+                        return GetLoc("MacroOptimization-Validate-PartyNumberRange", bracketText);
                     continue;
                 }
 
@@ -883,14 +893,15 @@ internal sealed unsafe class InfoPanel : ResNode // 宏信息面板
                 if (Regex.IsMatch(smartText, @"^enemy\.status:\d+$", RegexOptions.IgnoreCase))
                     continue;
 
-                return $"未知的智能目标格式: {bracketText}";
+                return GetLoc("MacroOptimization-Validate-UnknownSmartTargetFormat", bracketText);
             }
 
             if (!SupportedSuffixes.Contains(innerText))
-                return $"未知后缀: {bracketText}";
+                return GetLoc("MacroOptimization-Validate-UnknownSuffix", bracketText);
         }
 
         return string.Empty;
     }
 
+}
 }

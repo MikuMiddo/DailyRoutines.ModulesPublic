@@ -10,8 +10,8 @@ using Lumina.Excel.Sheets;
 
 namespace DailyRoutines.ModulesPublic;
 
-using static DailyRoutines.ModulesPublic.MacroOptimization;
-
+public unsafe partial class MacroOptimization
+{
 internal sealed class ProgressPanel : ResNode // 宏进度面板
 {
     private sealed class ProgressRow
@@ -63,7 +63,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         OverallProgressTextNode = new TextNode
         {
             IsVisible = true,
-            SeString = "总体进度",
+            SeString = GetLoc("MacroOptimization-Progress-OverallProgressTitle"),
             FontSize = 16,
             Position = new Vector2(10, -10),
             Size = new Vector2(225, 20),
@@ -167,9 +167,9 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         RefreshProgressList();
 
         if (ParsedMacroActionIDs.Count > 0) // 重置总体进度显示
-            OverallProgressTextNode.SeString = $"总体进度: 0 / {ParsedMacroActionIDs.Count} (0%)";
+            OverallProgressTextNode.SeString = GetLoc("MacroOptimization-Progress-OverallProgress", 0, ParsedMacroActionIDs.Count, 0);
         else
-            OverallProgressTextNode.SeString = "总体进度: 0 / 0 (0%)";
+            OverallProgressTextNode.SeString = GetLoc("MacroOptimization-Progress-OverallProgress", 0, 0, 0);
         OverallProgressBarNode.Progress = 1f;
     }
 
@@ -396,24 +396,24 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         {
             case "echo":
                 iconID = 246387; // 使用"嘘"图标
-                name = "私语";
+                name = GetLoc("MacroOptimization-Progress-CommandEcho");
                 break;
             case "wait":
                 iconID = 246428;// 使用"等待"图标
-                name = "等待";
+                name = GetLoc("MacroOptimization-Progress-CommandWait");
                 break;
             case "call":
                 iconID = 246261; // 使用"箭头"图标
-                name = "呼叫宏";
+                name = GetLoc("MacroOptimization-Progress-CommandCall");
                 break;
             case "close":
                 iconID = 246262; // 使用"关闭"图标
-                name = "关闭窗口";
+                name = GetLoc("MacroOptimization-Progress-CommandClose");
                 break;
             case "emote":
                 var emote = LuminaGetter.GetRow<Emote>(actionID);
                 iconID = emote?.Icon ?? 0;
-                name = emote?.Name.ToString() ?? "未知表情";
+                name = emote?.Name.ToString() ?? GetLoc("MacroOptimization-Progress-UnknownEmote");
                 break;
             case "if-conditional":
                 if (MacroCacheHelper.TryGetActionDisplay(actionID, out var conditionalDisplayInfo))
@@ -428,14 +428,14 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
                     var action = LuminaGetter.GetRow<FFAction>(actionID);
                     var caction = LuminaGetter.GetRow<CraftAction>(actionID);
                     iconID = action?.Icon ?? caction?.Icon ?? 0;
-                    name = action?.Name.ToString() ?? caction?.Name.ToString() ?? "未知技能";
+                    name = action?.Name.ToString() ?? caction?.Name.ToString() ?? GetLoc("MacroOptimization-Progress-UnknownSkill");
                     isAction = action != null;
                     isCraftAction = caction != null;
                 }
                 else
                 {
                     iconID = 246367; // 使用“疑问”图标作为默认
-                    name = "条件命令";
+                    name = GetLoc("MacroOptimization-Progress-ConditionalCommand");
                 }
                 break;
             case "action":
@@ -452,7 +452,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
                     var action = LuminaGetter.GetRow<FFAction>(actionID);
                     var caction = LuminaGetter.GetRow<CraftAction>(actionID);
                     iconID = action?.Icon ?? caction?.Icon ?? 0;
-                    name = action?.Name.ToString() ?? caction?.Name.ToString() ?? "未知技能";
+                    name = action?.Name.ToString() ?? caction?.Name.ToString() ?? GetLoc("MacroOptimization-Progress-UnknownSkill");
                     isAction = action != null;
                     isCraftAction = caction != null;
                 }
@@ -490,7 +490,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         if (hasCondition) // 如果是条件命令，显示 [条件] 标签
         {
             row.ConditionStatusNode.IsVisible = true;
-            row.ConditionStatusNode.SeString = "[条件]";
+            row.ConditionStatusNode.SeString = GetLoc("MacroOptimization-Progress-ConditionTag");
             row.ConditionStatusNode.Position = new(60f, hasBothLabels ? 2f : 8f);
         }
         else
@@ -499,7 +499,7 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         if (hasTarget) // 如果有目标后缀，显示 [目标] 标签
         {
             row.TargetStatusNode.IsVisible = true;
-            row.TargetStatusNode.SeString = "<目标>";
+            row.TargetStatusNode.SeString = GetLoc("MacroOptimization-Progress-TargetTag");
             row.TargetStatusNode.Position = new(60f, hasBothLabels ? 16f : 8f);
         }
         else
@@ -610,12 +610,12 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         OverallProgressBarNode.Progress = progress;
 
         if (ParsedMacroActionIDs.Count == 0)
-            OverallProgressTextNode.SeString = "总体进度: 0 / 0 (0%)";
+            OverallProgressTextNode.SeString = GetLoc("MacroOptimization-Progress-OverallProgress", 0, 0, 0);
         else
         {
             var current = currentStep >= 0 ? currentStep : (int)(progress * ParsedMacroActionIDs.Count);
             var percentage = (int)(progress * 100);
-            OverallProgressTextNode.SeString = $"总体进度: {current} / {ParsedMacroActionIDs.Count} ({percentage}%)";
+            OverallProgressTextNode.SeString = GetLoc("MacroOptimization-Progress-OverallProgress", current, ParsedMacroActionIDs.Count, percentage);
         }
     }
 
@@ -636,10 +636,10 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
             {
                 var row = ProgressRows[i];
                 if (row.ConditionStatusNode.IsVisible)
-                    row.ConditionStatusNode.SeString = "[条件]";
+                    row.ConditionStatusNode.SeString = GetLoc("MacroOptimization-Progress-ConditionTag");
 
                 if (row.TargetStatusNode.IsVisible)
-                    row.TargetStatusNode.SeString = "<目标>";
+                    row.TargetStatusNode.SeString = GetLoc("MacroOptimization-Progress-TargetTag");
             }
         }
 
@@ -648,8 +648,9 @@ internal sealed class ProgressPanel : ResNode // 宏进度面板
         OverallProgressBarNode.Progress = 1f;
         OverallProgressBarNode.BarColor = KnownColor.White.Vector();
         if (ParsedMacroActionIDs.Count > 0)
-            OverallProgressTextNode.SeString = $"总体进度: 0 / {ParsedMacroActionIDs.Count} (0%)";
+            OverallProgressTextNode.SeString = GetLoc("MacroOptimization-Progress-OverallProgress", 0, ParsedMacroActionIDs.Count, 0);
         else
-            OverallProgressTextNode.SeString = "总体进度: 0 / 0 (0%)";
+            OverallProgressTextNode.SeString = GetLoc("MacroOptimization-Progress-OverallProgress", 0, 0, 0);
     }
+}
 }

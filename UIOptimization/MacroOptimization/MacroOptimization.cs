@@ -18,8 +18,8 @@ public unsafe partial class MacroOptimization : DailyModuleBase
 {
     public override ModuleInfo Info { get; } = new()
     {
-        Title = GetLoc("扩展宏"),
-        Description = GetLoc("添加扩展宏窗口"),
+        Title = GetLoc("MacroOptimizationTitle"),
+        Description = GetLoc("MacroOptimizationDescription"),
         Category = ModuleCategories.UIOptimization,
         Author = ["Middo"]
     };
@@ -61,7 +61,7 @@ public unsafe partial class MacroOptimization : DailyModuleBase
         MacroSettingsAddon ??= new(this)
         {
             InternalName = "DRMacroSettings",
-            Title = GetLoc("宏设置"),
+            Title = GetLoc("MacroOptimization-Window-Settings"),
             Size = new Vector2(300.0f, 320.0f),
             RememberClosePosition = true
         };
@@ -69,7 +69,7 @@ public unsafe partial class MacroOptimization : DailyModuleBase
         MacroHelpAddon ??= new()
         {
             InternalName = "DRMacroHelp",
-            Title = GetLoc("扩展宏帮助窗口"),
+            Title = GetLoc("MacroOptimization-Window-Help"),
             Size = new Vector2(780.0f, 520.0f),
             RememberClosePosition = true
         };
@@ -77,7 +77,7 @@ public unsafe partial class MacroOptimization : DailyModuleBase
         MacroCooldownViewerAddon ??= new(this)
         {
             InternalName = "DRMacroCooldownViewer",
-            Title = GetLoc("技能冷却时间"),
+            Title = GetLoc("MacroOptimization-Window-CooldownViewer"),
             Size = new Vector2(480.0f, 530.0f),
             RememberClosePosition = true
         };
@@ -85,12 +85,12 @@ public unsafe partial class MacroOptimization : DailyModuleBase
         MacroExtendAddon ??= new(this, TaskHelper, MacroSettingsAddon)
         {
             InternalName = "DRMacroExtendDisplay",
-            Title = GetLoc("扩展宏窗口"),
+            Title = GetLoc("MacroOptimization-Window-Main"),
             Size = new Vector2(915.0f, 650.0f),
             RememberClosePosition = true
         };
 
-        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw,    "Macro", OnMacroAddon);
+        DService.AddonLifecycle.RegisterListener(AddonEvent.PostDraw, "Macro", OnMacroAddon);
         DService.AddonLifecycle.RegisterListener(AddonEvent.PreFinalize, "Macro", OnMacroAddon);
 
         ModuleConfig = LoadConfig<MacroConfig>() ?? new();
@@ -112,7 +112,7 @@ public unsafe partial class MacroOptimization : DailyModuleBase
                     {
                         Size = new(150f, 30f),
                         IsVisible = true,
-                        String = GetLoc("打开扩展宏窗口"),
+                        String = GetLoc("MacroOptimization-OpenExtendWindow"),
                         OnClick = () => MacroExtendAddon?.Toggle(),
                         Position = new(160, 515)
                     };
@@ -127,7 +127,7 @@ public unsafe partial class MacroOptimization : DailyModuleBase
         }
     }
 
-    public static void OpenStandaloneMacroWindowByIndex(int macroIndex, int? loopCount = null)
+    public static void OpenStandaloneMacroWindowByIndex(int macroIndex, int? loopCount = null, bool autoRun = false)
     {
         if (macroIndex < 0 || macroIndex >= ModuleConfig.ExtendMacroLists.Count)
             return;
@@ -141,23 +141,25 @@ public unsafe partial class MacroOptimization : DailyModuleBase
             Size = new(300, 430),
             RememberClosePosition = false
         };
+
         lock (StandaloneProcessDisplaysLock)
             StandaloneProcessDisplays.Add(processDisplay);
-        processDisplay.OpenWithExtendMacro(macro, loopCount);
+
+        processDisplay.OpenWithExtendMacro(macro, loopCount, autoRun);
     }
 
-    public static void OpenStandaloneMacroWindowByName(string macroName, int? loopCount = null)
+    public static void OpenStandaloneMacroWindowByName(string macroName, int? loopCount = null, bool autoRun = false)
     {
         var macroIndex = ModuleConfig.ExtendMacroLists.FindIndex(m =>
             string.Equals(m.Name, macroName, StringComparison.OrdinalIgnoreCase));
 
         if (macroIndex < 0)
         {
-            ChatManager.SendCommand($"/e 未找到宏: {macroName}");
+            ChatManager.SendCommand($"/e {GetLoc("MacroOptimization-Chat-MacroNotFound", macroName)}");
             return;
         }
 
-        OpenStandaloneMacroWindowByIndex(macroIndex, loopCount);
+        OpenStandaloneMacroWindowByIndex(macroIndex, loopCount, autoRun);
     }
 
     protected override void Uninit()
@@ -178,7 +180,6 @@ public unsafe partial class MacroOptimization : DailyModuleBase
         MacroSettingsAddon?.Dispose();
         MacroSettingsAddon = null;
     }
-
 }
 
 public sealed class MacroConfig : ModuleConfiguration

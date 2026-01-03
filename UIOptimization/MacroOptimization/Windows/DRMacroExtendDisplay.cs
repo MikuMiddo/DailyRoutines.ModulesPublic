@@ -123,8 +123,8 @@ public unsafe partial class MacroOptimization
     {
         var newMacro = new ExtendMacro
         {
-            Name = "新宏",
-            Description = "新建的宏",
+            Name = GetLoc("MacroOptimization-List-NewMacro-Name"),
+            Description = GetLoc("MacroOptimization-List-NewMacro-Description"),
             IconID = 66001,
             MacroLines = ""
         };
@@ -308,8 +308,8 @@ public unsafe partial class MacroOptimization
         {
             var newMacro = new ExtendMacro
             {
-                Name = "新宏",
-                Description = "新建的宏",
+                Name = GetLoc("MacroOptimization-List-NewMacro-Name"),
+                Description = GetLoc("MacroOptimization-List-NewMacro-Description"),
                 IconID = 66001,
                 MacroLines = ""
             };
